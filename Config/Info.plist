@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Mac Cleaner asks System Events for your login items so you can review and remove them. It never controls other apps without your action.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.maccleaner.MacCleaner</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>maccleaner</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

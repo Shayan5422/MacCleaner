@@ -1,0 +1,86 @@
+name: MacCleaner
+options:
+  bundleIdPrefix: com.maccleaner
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+  xcodeVersion: "27.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+    CODE_SIGN_STYLE: Automatic
+    # "-" signs to run locally. Set DEVELOPMENT_TEAM (or override in Xcode) for Developer ID builds.
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_STRICT_CONCURRENCY: complete
+    GCC_TREAT_WARNINGS_AS_ERRORS: NO
+targets:
+  MacCleaner:
+    type: application
+    platform: macOS
+    sources:
+      - path: MacCleaner
+      - path: Config/LaunchAgents/com.maccleaner.MacCleaner.automation.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
+    settings:
+      base:
+        PRODUCT_NAME: Mac Cleaner
+        PRODUCT_MODULE_NAME: MacCleaner
+        PRODUCT_BUNDLE_IDENTIFIER: com.maccleaner.MacCleaner
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: Config/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Mac Cleaner
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026. All rights reserved."
+        CODE_SIGN_ENTITLEMENTS: Config/MacCleaner.entitlements
+        ENABLE_APP_SANDBOX: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        COMBINE_HIDPI_IMAGES: YES
+        ENABLE_PREVIEWS: YES
+  MacCleanerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: MacCleanerTests
+    dependencies:
+      - target: MacCleaner
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.maccleaner.MacCleanerTests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Mac Cleaner.app/Contents/MacOS/Mac Cleaner"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  MacCleaner:
+    build:
+      targets:
+        MacCleaner: all
+        MacCleanerTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: true
+      coverageTargets:
+        - MacCleaner
+      targets:
+        - name: MacCleanerTests
+          parallelizable: false
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

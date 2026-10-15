@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Distributed with Developer ID outside the Mac App Store, without the App Sandbox:
+	     a disk cleaner needs to read your whole home folder (with your Full Disk Access
+	     approval). See docs/PERMISSIONS.md. Hardened Runtime is enabled in the build settings. -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>

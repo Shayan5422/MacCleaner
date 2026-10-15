@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Registered with SMAppService.agent(plistName:) when automatic cleaning is turned on.
+	     launchd starts the app's own executable in headless mode about once an hour; the run
+	     exits immediately unless a schedule or storage threshold is due. Missed runs while the
+	     Mac sleeps are coalesced by launchd, so nothing runs repeatedly after wake. -->
+	<key>Label</key>
+	<string>com.maccleaner.MacCleaner.automation</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/Mac Cleaner</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>Mac Cleaner</string>
+		<string>--run-automation</string>
+	</array>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>com.maccleaner.MacCleaner</string>
+	</array>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>LowPriorityIO</key>
+	<true/>
+	<key>Nice</key>
+	<integer>10</integer>
+</dict>
+</plist>

@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/Shayan5422/MacCleaner/releases/latest"><img src="https://img.shields.io/github/v/release/Shayan5422/MacCleaner?label=download&color=6c5ce7" alt="Latest release"></a>
+  <a href="https://github.com/Shayan5422/MacCleaner/actions/workflows/ci.yml"><img src="https://github.com/Shayan5422/MacCleaner/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
   <img src="https://img.shields.io/badge/macOS-14%2B-blue" alt="macOS 14 or later">
   <img src="https://img.shields.io/badge/Apple%20silicon%20%26%20Intel-native-black" alt="Universal">
   <img src="https://img.shields.io/badge/Swift-6-orange" alt="Swift 6">

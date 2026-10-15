@@ -28,6 +28,8 @@ xcodebuild -project MacCleaner.xcodeproj -scheme MacCleaner -destination 'platfo
 
 Tests create and delete files only inside temporary folders. One test moves a temporary file to your Trash and restores it, to verify Undo.
 
+Every push to `main` and every pull request runs the same build and test suite on GitHub Actions (`.github/workflows/ci.yml`, on the `xcode-27` macOS image). The workflow also fails if the build produces any Swift compiler warnings. No signing secrets are needed: CI builds use the project's ad-hoc "Sign to Run Locally" setting.
+
 ## Changing the project
 
 `project.yml` is the source of truth. After editing it (or adding/removing files):

@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & test (Xcode 27)
+    # GitHub's macOS 27 image with Xcode 27 (public preview). The project uses
+    # Swift 6 with strict concurrency and is developed with Xcode 27.
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      REQUIRED_XCODE_MAJOR: "27"
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          # Use the stable Xcode 27 release (the image also ships betas, some behind
+          # version-named symlinks, so "newest" isn't safe). Fall back to the default.
+          if [ -d /Applications/Xcode_27.app ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_27.app/Contents/Developer" >> "$GITHUB_ENV"
+            export DEVELOPER_DIR=/Applications/Xcode_27.app/Contents/Developer
+          fi
+          version="$(xcodebuild -version | head -1 | awk '{print $2}')"
+          major="${version%%.*}"
+          echo "Using Xcode $version (${DEVELOPER_DIR:-$(xcode-select -p)})"
+          if [ "$major" -lt "$REQUIRED_XCODE_MAJOR" ]; then
+            echo "::error title=Xcode too old::Mac Cleaner needs Xcode $REQUIRED_XCODE_MAJOR or later, but this runner has Xcode $version."
+            exit 1
+          fi
+
+      - name: Show environment
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+          uname -m
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild \
+            -project MacCleaner.xcodeproj \
+            -scheme MacCleaner \
+            -configuration Debug \
+            -destination 'platform=macOS,arch=arm64' \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/TestResults.xcresult \
+            test 2>&1 | tee build/xcodebuild.log
+
+      - name: Fail on Swift warnings
+        run: |
+          # The project builds with zero compiler warnings; keep it that way.
+          if grep -E '\.swift:[0-9]+:[0-9]+: warning:' build/xcodebuild.log | sort -u > build/warnings.txt && [ -s build/warnings.txt ]; then
+            echo "::error title=Compiler warnings::$(wc -l < build/warnings.txt | tr -d ' ') Swift warning(s) found"
+            cat build/warnings.txt
+            exit 1
+          fi
+          echo "No Swift compiler warnings."
+
+      - name: Summarize tests
+        if: always()
+        run: |
+          if [ -f build/xcodebuild.log ]; then
+            summary="$(grep -E 'Test run with [0-9]+ tests' build/xcodebuild.log | tail -1 || true)"
+            failures="$(grep -E '✘ Test ' build/xcodebuild.log | sort -u | head -50 || true)"
+            {
+              echo "### Test results"
+              echo ""
+              echo "${summary:-No Swift Testing summary found (the build may have failed).}"
+              if [ -n "$failures" ]; then
+                echo ""
+                echo '```'
+                echo "$failures"
+                echo '```'
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload logs and test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-results
+          path: |
+            build/xcodebuild.log
+            build/warnings.txt
+            build/TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 14

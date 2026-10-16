@@ -269,7 +269,7 @@ struct AVStatusTiles: View {
     private var shieldCaption: String {
         guard model.isRealTimeProtectionOn else { return model.definitionsInstalled ? "New files aren't checked" : "Starts with definitions" }
         if !model.shieldStatistics.deniedFolders.isEmpty { return "Some folders need permission" }
-        return "\(NumberFormatting.count(model.shieldStatistics.filesScanned)) files checked"
+        return "\(NumberFormatting.count(model.shieldStatistics.filesScanned, "file")) checked"
     }
 
     private var definitionsValue: String {

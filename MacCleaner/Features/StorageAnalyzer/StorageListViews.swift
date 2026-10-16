@@ -402,7 +402,7 @@ struct StorageCategoriesView: View {
                             .frame(width: 24)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(category.title).font(.callout.weight(.medium))
-                            Text("\(NumberFormatting.count(statistics.count(for: category))) files")
+                            Text("\(NumberFormatting.count(statistics.count(for: category), "file"))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

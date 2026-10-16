@@ -76,7 +76,7 @@ struct SystemJunkView: View {
     private var results: some View {
         TileRow {
             StatTile(title: "Found", value: ByteFormatting.string(model.totalBytes),
-                     caption: "\(NumberFormatting.count(model.allCandidates.count)) items", symbol: "magnifyingglass", tint: AppSection.systemJunk.tint, fillsHeight: true)
+                     caption: "\(NumberFormatting.count(model.allCandidates.count, "item"))", symbol: "magnifyingglass", tint: AppSection.systemJunk.tint, fillsHeight: true)
             StatTile(title: "Safe to remove", value: ByteFormatting.string(model.safeBytes),
                      caption: "Selected for you", symbol: "checkmark.shield", tint: .green, fillsHeight: true)
             StatTile(title: "Needs review", value: ByteFormatting.string(model.totalBytes - model.safeBytes),

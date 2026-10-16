@@ -39,7 +39,7 @@ struct AntivirusDashboardCard: View {
             HStack(spacing: 8) {
                 if model.isScanning, let progress = model.scanProgress {
                     ProgressView().controlSize(.small)
-                    Text("\(NumberFormatting.count(progress.filesScanned)) files checked").font(.caption).foregroundStyle(.secondary)
+                    Text("\(NumberFormatting.count(progress.filesScanned, "file")) checked").font(.caption).foregroundStyle(.secondary)
                     Spacer()
                     Button("Stop") { model.cancelScan() }.controlSize(.small)
                 } else if model.activeThreatCount > 0 {
@@ -121,7 +121,7 @@ struct AntivirusMenuBarSection: View {
                         ProgressView().progressViewStyle(.linear).tint(AppSection.antivirus.tint)
                     }
                     HStack {
-                        Text("\(progress.kind.title): \(NumberFormatting.count(progress.filesScanned)) files · \(progress.threatsFound) threat\(progress.threatsFound == 1 ? "" : "s")")
+                        Text("\(progress.kind.title): \(NumberFormatting.count(progress.filesScanned, "file")) · \(progress.threatsFound) threat\(progress.threatsFound == 1 ? "" : "s")")
                             .font(.caption)
                             .monospacedDigit()
                             .foregroundStyle(progress.threatsFound > 0 ? .red : .secondary)

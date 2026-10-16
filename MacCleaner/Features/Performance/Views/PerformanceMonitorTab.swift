@@ -641,9 +641,13 @@ struct PerformanceProcessesCard: View {
         }
         if let restricted = model.monitor.restrictedProcessCount, restricted > 0 {
             if model.processScope == .all {
-                text += " \(NumberFormatting.count(restricted)) processes belong to macOS or other users: only their name and owner are shown, because macOS doesn't let apps read their CPU and memory use."
+                text += restricted == 1
+                    ? " 1 process belongs to macOS or another user: only its name and owner are shown, because macOS doesn't let apps read its CPU and memory use."
+                    : " \(NumberFormatting.count(restricted)) processes belong to macOS or other users: only their name and owner are shown, because macOS doesn't let apps read their CPU and memory use."
             } else {
-                text += " \(NumberFormatting.count(restricted)) processes owned by macOS or other users aren't listed here (choose All Processes to see them with limited details)."
+                text += restricted == 1
+                    ? " 1 process owned by macOS or another user isn't listed here (choose All Processes to see it with limited details)."
+                    : " \(NumberFormatting.count(restricted)) processes owned by macOS or other users aren't listed here (choose All Processes to see them with limited details)."
             }
         }
         if !model.monitor.processesMeasured {

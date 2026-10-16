@@ -115,13 +115,13 @@ struct SmartScanView: View {
                 summaryLine(symbol: "checkmark.shield.fill", tint: .green,
                             text: "\(ByteFormatting.string(model.safeReclaimable)) safe to remove — selected for you")
                 summaryLine(symbol: "eye.fill", tint: .orange,
-                            text: "\(ByteFormatting.string(model.reviewReclaimable)) in \(NumberFormatting.count(model.reviewCandidates.count)) items needs your review")
+                            text: "\(ByteFormatting.string(model.reviewReclaimable)) in \(NumberFormatting.count(model.reviewCandidates.count, "item")) needs your review")
                 summaryLine(symbol: securitySymbol, tint: securityTint, text: securityText)
                 if model.count(.recommendation) > 0 {
                     summaryLine(symbol: "lightbulb.fill", tint: .blue, text: "\(model.count(.recommendation)) recommendation\(model.count(.recommendation) == 1 ? "" : "s")")
                 }
                 if let started = model.startedAt, let finished = model.finishedAt {
-                    Text("Finished in \(DateFormatting.duration(finished.timeIntervalSince(started)))" + (model.duplicatesMerged > 0 ? " · \(model.duplicatesMerged) items found by more than one check were counted once" : ""))
+                    Text("Finished in \(DateFormatting.duration(finished.timeIntervalSince(started)))" + (model.duplicatesMerged > 0 ? (model.duplicatesMerged == 1 ? " · 1 item found by more than one check was counted once" : " · \(model.duplicatesMerged) items found by more than one check were counted once") : ""))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -36,6 +36,7 @@ Mac Cleaner becomes the assistant that watches over your Mac: an antivirus with 
 
 ### Fixed
 - Files that Spotlight, Quick Look or XProtect were only reading for a moment (for example a freshly downloaded app being indexed) were skipped as "in use" during cleanup.
+- Counts of one read correctly ("1 file", "1 folder couldn't be read") throughout the app.
 
 ## [1.0.0] — 2026-10-15
 

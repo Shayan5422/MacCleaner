@@ -177,7 +177,7 @@ private struct UpdatesSummaryTiles: View {
             StatTile(
                 title: "Up to Date",
                 value: checked ? NumberFormatting.count(model.upToDateCount) : "—",
-                caption: "\(NumberFormatting.count(model.allRows.count)) apps installed",
+                caption: "\(NumberFormatting.count(model.allRows.count, "app")) installed",
                 symbol: "checkmark.circle.fill",
                 tint: .green,
                 fillsHeight: true
@@ -313,7 +313,7 @@ struct UpdatesSectionCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(section.group.title), \(section.rows.count) apps")
+            .accessibilityLabel("\(section.group.title), \(NumberFormatting.count(section.rows.count, "app"))")
             .accessibilityValue(expanded ? "Expanded" : "Collapsed")
             .accessibilityHint(expanded ? "Collapses the group" : "Expands the group")
 

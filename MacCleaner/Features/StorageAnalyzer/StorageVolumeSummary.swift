@@ -223,7 +223,7 @@ struct StorageNotScannedExplanation: View {
                 bullet("APFS local snapshots kept by Time Machine and macOS updates.")
                 bullet("Files of other users on this Mac.")
                 bullet(statistics.unreadableCount > 0
-                       ? "\(NumberFormatting.count(statistics.unreadableCount)) folders Mac Cleaner isn't allowed to read. Full Disk Access lets it include most of them."
+                       ? "\(NumberFormatting.count(statistics.unreadableCount, "folder")) Mac Cleaner isn't allowed to read. Full Disk Access lets it include \(statistics.unreadableCount == 1 ? "it in most cases" : "most of them")."
                        : "Folders protected by macOS, which no app can read.")
                 if purgeable > 0 {
                     bullet("Purgeable space (\(ByteFormatting.string(purgeable))) is counted as available by macOS. The files it consists of, such as downloaded iCloud items, may still appear in the scan.")

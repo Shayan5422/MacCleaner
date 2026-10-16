@@ -19,7 +19,9 @@ struct AVShieldsTab: View {
                         AVInfoRow(label: "Files checked", value: NumberFormatting.count(model.shieldStatistics.filesScanned))
                         AVInfoRow(label: "Last check", value: model.shieldStatistics.lastScanAt.map { AVFormat.relative($0) } ?? "Waiting for new files")
                         if model.shieldStatistics.droppedEvents > 0 {
-                            AVInfoRow(label: "Skipped", value: "\(model.shieldStatistics.droppedEvents) changes arrived too fast; run a Quick Scan to check them", valueColor: .orange)
+                            AVInfoRow(label: "Skipped", value: model.shieldStatistics.droppedEvents == 1
+                                                               ? "1 change arrived too fast; run a Quick Scan to check it"
+                                                               : "\(model.shieldStatistics.droppedEvents) changes arrived too fast; run a Quick Scan to check them", valueColor: .orange)
                         }
                     }
                 }
@@ -84,7 +86,7 @@ struct AVShieldsTab: View {
     private var fileShieldStatus: String {
         guard model.isRealTimeProtectionOn else { return model.definitionsInstalled ? "Off" : "Off until definitions are installed" }
         if !model.definitionsInstalled { return "On, with built-in test signatures only" }
-        return model.shieldStatistics.deniedFolders.isEmpty ? "Watching \(model.watchedFolderCount) folders" : "On, some folders need permission"
+        return model.shieldStatistics.deniedFolders.isEmpty ? "Watching \(NumberFormatting.count(model.watchedFolderCount, "folder"))" : "On, some folders need permission"
     }
 
     private var downloadShieldStatus: String {

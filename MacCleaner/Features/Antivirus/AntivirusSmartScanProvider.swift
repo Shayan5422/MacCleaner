@@ -22,7 +22,7 @@ struct AntivirusSmartScanProvider: SmartScanProvider {
         try Task.checkCancellation()
         let report = await service.run(plan) { progress in
             let fraction = progress.fraction ?? min(0.6, Double(progress.filesScanned) / 40_000)
-            context.reportProgress(0.05 + 0.93 * fraction, "Scanning \(NumberFormatting.count(progress.filesScanned)) files…")
+            context.reportProgress(0.05 + 0.93 * fraction, "Scanning \(NumberFormatting.count(progress.filesScanned, "file"))…")
         }
         try Task.checkCancellation()
         context.reportProgress(1, "Virus scan finished")
@@ -54,7 +54,7 @@ struct AntivirusSmartScanProvider: SmartScanProvider {
             ))
         }
         let summary = report.threats.isEmpty
-            ? (report.usedDefinitions ? "No threats found in \(NumberFormatting.count(report.filesScanned)) files" : "Definitions not installed")
+            ? (report.usedDefinitions ? "No threats found in \(NumberFormatting.count(report.filesScanned, "file"))" : "Definitions not installed")
             : report.summary.resultLine
         return SmartScanContribution(area: .malware, candidates: [], findings: findings, summary: summary)
     }

@@ -119,7 +119,7 @@ struct CloudStorageView: View {
         guard let progress = model.progress else { return "Starting…" }
         switch progress.phase {
         case .reading:
-            return "Reading \(progress.locationTitle) · \(NumberFormatting.count(progress.filesSeen)) items"
+            return "Reading \(progress.locationTitle) · \(NumberFormatting.count(progress.filesSeen, "item"))"
         case .readingDates:
             return "Reading when files were last opened…"
         case .comparing:
@@ -214,11 +214,11 @@ struct CloudResultsView: View {
         VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
             TileRow {
                 StatTile(title: "In Your Cloud Folders", value: ByteFormatting.string(model.totalLogicalBytes),
-                         caption: "\(NumberFormatting.count(model.totalFileCount)) files", symbol: "icloud", tint: AppSection.cloud.tint, fillsHeight: true)
+                         caption: "\(NumberFormatting.count(model.totalFileCount, "file"))", symbol: "icloud", tint: AppSection.cloud.tint, fillsHeight: true)
                 StatTile(title: "Stored on This Mac", value: ByteFormatting.string(model.totalLocalBytes),
                          caption: "Downloaded copies", symbol: "internaldrive", tint: AppSection.storage.tint, fillsHeight: true)
                 StatTile(title: "Cloud-Only", value: ByteFormatting.string(model.totalCloudOnlyBytes),
-                         caption: "\(NumberFormatting.count(model.totalCloudOnlyCount)) files", symbol: "icloud.and.arrow.up", tint: .secondary, fillsHeight: true)
+                         caption: "\(NumberFormatting.count(model.totalCloudOnlyCount, "file"))", symbol: "icloud.and.arrow.up", tint: .secondary, fillsHeight: true)
                 StatTile(title: "Could Be Freed", value: ByteFormatting.string(recoverableBytes),
                          caption: "By removing downloads", symbol: "sparkles", tint: .green, fillsHeight: true)
             }
@@ -312,9 +312,9 @@ struct CloudProviderCard: View {
             )
             HStack(spacing: 16) {
                 LegendItem(color: group.provider.tint, label: "On this Mac", value: ByteFormatting.string(group.localBytes))
-                LegendItem(color: Color.gray.opacity(0.35), label: "Cloud-only", value: "\(ByteFormatting.string(group.cloudOnlyBytes)) · \(NumberFormatting.count(group.cloudOnlyCount)) files")
+                LegendItem(color: Color.gray.opacity(0.35), label: "Cloud-only", value: "\(ByteFormatting.string(group.cloudOnlyBytes)) · \(NumberFormatting.count(group.cloudOnlyCount, "file"))")
                 if group.notDownloadedFolders > 0 {
-                    LegendItem(color: .clear, label: "\(NumberFormatting.count(group.notDownloadedFolders)) folders not downloaded")
+                    LegendItem(color: .clear, label: "\(NumberFormatting.count(group.notDownloadedFolders, "folder")) not downloaded")
                         .help("These folders exist only in the cloud. They weren't opened, so nothing was downloaded; files inside them aren't counted.")
                 }
             }

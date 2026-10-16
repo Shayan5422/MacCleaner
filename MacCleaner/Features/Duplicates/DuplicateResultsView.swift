@@ -149,7 +149,7 @@ struct DuplicateScanNotes: View {
     var body: some View {
         if let result = model.exactResult {
             HStack(spacing: 8) {
-                Text("\(NumberFormatting.count(result.filesExamined)) files checked in \(DateFormatting.duration(max(1, result.duration)))")
+                Text("\(NumberFormatting.count(result.filesExamined, "file")) checked in \(DateFormatting.duration(max(1, result.duration)))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !result.hardLinkSets.isEmpty {

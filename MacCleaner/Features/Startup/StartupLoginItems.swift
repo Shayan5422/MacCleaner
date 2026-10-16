@@ -25,6 +25,8 @@ enum StartupLoginItemsError: LocalizedError, Sendable {
     case scriptFailed(code: Int, message: String)
     case unexpectedResult
     case itemChanged
+    /// Several login items have this name; System Events can only remove them by name.
+    case ambiguousName(String)
 
     var errorDescription: String? {
         switch self {
@@ -36,6 +38,8 @@ enum StartupLoginItemsError: LocalizedError, Sendable {
             return "System Events returned an unexpected answer."
         case .itemChanged:
             return "The login item changed since it was listed. Refresh and try again."
+        case .ambiguousName(let name):
+            return "Several login items are named “\(name)”, and Mac Cleaner can't tell them apart. Remove the one you want in System Settings › General › Login Items & Extensions."
         }
     }
 }
@@ -114,6 +118,8 @@ enum StartupLoginItemsService {
         guard current.contains(where: { $0.name == name && $0.path == expectedPath }) else {
             throw StartupLoginItemsError.itemChanged
         }
+        // System Events deletes by name; with two items of the same name it could remove the other one.
+        guard current.filter({ $0.name == name }).count == 1 else { throw StartupLoginItemsError.ambiguousName(name) }
         _ = try run("tell application \"System Events\" to delete login item \"\(appleScriptEscaped(name))\"")
     }
 

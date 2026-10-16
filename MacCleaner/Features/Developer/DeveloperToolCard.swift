@@ -149,7 +149,7 @@ private struct DeveloperGroupHeader: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("\(title), \(items.count) items")
+            .accessibilityLabel("\(title), \(NumberFormatting.count(items.count, "item"))")
             .accessibilityHint(isExpanded ? "Collapses the group" : "Expands the group")
             .accessibilityAddTraits(.isHeader)
             Spacer()

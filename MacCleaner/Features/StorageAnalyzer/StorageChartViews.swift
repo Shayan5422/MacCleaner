@@ -137,7 +137,7 @@ struct StorageChartTooltip: View {
         case .directory:
             if node.isUnreadable { return "Couldn't be read — contents not included" }
             if node.isCloudOnly { return "In the cloud, not downloaded" }
-            return "\(NumberFormatting.count(node.itemCount)) files · click to open"
+            return "\(NumberFormatting.count(node.itemCount, "file")) · click to open"
         case .smallFiles:
             return "Files under 1 MB each, combined"
         case .package, .file:
@@ -496,7 +496,7 @@ struct StorageSunburstView<Menu: View>: View {
                 Text(ByteFormatting.string(node.size))
                     .font(.system(.title3, design: .rounded).weight(.semibold))
                     .monospacedDigit()
-                Text("\(NumberFormatting.count(node.itemCount)) files")
+                Text("\(NumberFormatting.count(node.itemCount, "file"))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

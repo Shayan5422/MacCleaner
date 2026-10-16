@@ -175,7 +175,7 @@ struct UninstallerSizeLabel: View {
                     }
                     SizeText(bytes: usage.reclaimableBytes, font: font)
                 }
-                .help(usage.unreadableDirectoryCount > 0 ? "Some folders inside couldn't be read, so the real size may be larger." : "\(NumberFormatting.count(usage.fileCount)) files")
+                .help(usage.unreadableDirectoryCount > 0 ? "Some folders inside couldn't be read, so the real size may be larger." : "\(NumberFormatting.count(usage.fileCount, "file"))")
             } else {
                 Text("—")
                     .font(font)

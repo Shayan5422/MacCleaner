@@ -73,7 +73,7 @@ struct StartupSmartScanProvider: SmartScanProvider {
 
     private static func summary(for inventory: StartupInventory, findings: [Finding]) -> String {
         let flagged = inventory.potentiallyUnnecessary.filter { !$0.isProtected }.count
-        if flagged == 0 { return "\(inventory.items.count) startup items, none look unnecessary" }
+        if flagged == 0 { return "\(NumberFormatting.count(inventory.items.count, "startup item")), none look unnecessary" }
         return "\(flagged) of \(inventory.items.count) startup item\(inventory.items.count == 1 ? "" : "s") may be unnecessary"
     }
 }

@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Mac Cleaner scans new downloads for malware and finds old installers and large files you may want to remove.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Mac Cleaner scans files on your Desktop for malware and includes it in storage and duplicate scans.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Mac Cleaner scans your documents for malware and includes them in storage and duplicate scans. Nothing is removed without your review.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Mac Cleaner scans external drives for malware and shows what takes up space on them when you ask.</string>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Mac Cleaner asks System Events for your login items so you can review and remove them. It never controls other apps without your action.</string>
 	<key>CFBundleURLTypes</key>

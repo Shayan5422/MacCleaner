@@ -76,7 +76,7 @@ struct SystemJunkView: View {
     private var results: some View {
         TileRow {
             StatTile(title: "Found", value: ByteFormatting.string(model.totalBytes),
-                     caption: "\(NumberFormatting.count(model.allCandidates.count)) items", symbol: "magnifyingglass", tint: AppSection.systemJunk.tint, fillsHeight: true)
+                     caption: "\(NumberFormatting.count(model.allCandidates.count, "item"))", symbol: "magnifyingglass", tint: AppSection.systemJunk.tint, fillsHeight: true)
             StatTile(title: "Safe to remove", value: ByteFormatting.string(model.safeBytes),
                      caption: "Selected for you", symbol: "checkmark.shield", tint: .green, fillsHeight: true)
             StatTile(title: "Needs review", value: ByteFormatting.string(model.totalBytes - model.safeBytes),
@@ -106,9 +106,12 @@ struct SystemJunkView: View {
                 .background(Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text("In the Trash").font(.caption).foregroundStyle(.secondary)
-                Text(model.trashSize.map { ByteFormatting.string($0) } ?? "—")
+                Text(model.trashSize.map { ByteFormatting.string($0) } ?? "Not measured")
                     .font(.system(.title3, design: .rounded).weight(.semibold))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .help(model.trashSize == nil ? "Mac Cleaner needs Full Disk Access to measure the Trash." : "")
                 Button("Open Trash") { FinderActions.openTrash() }
                     .buttonStyle(.link)
                     .font(.caption2)

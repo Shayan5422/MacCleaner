@@ -29,7 +29,10 @@ enum UpdatesResultStore {
         encoder.dateEncodingStrategy = .iso8601
         // Release notes can be long; they're fetched again with the next check.
         var compact = snapshot
-        for key in compact.results.keys { compact.results[key]?.releaseNotesText = nil }
+        for key in compact.results.keys {
+            compact.results[key]?.releaseNotesText = nil
+            compact.results[key]?.releaseNotesHTML = nil
+        }
         if let data = try? encoder.encode(compact) { defaults.set(data, forKey: key) }
     }
 
@@ -50,7 +53,7 @@ enum UpdatesResultStore {
     }
 }
 
-/// Runs `brew upgrade --cask <token>` after the person confirmed it, and shows the output.
+/// Runs `brew upgrade --cask <tokens>` after the person confirmed it, and shows the output.
 @MainActor
 @Observable
 final class UpdatesHomebrewRun: Identifiable {
@@ -59,29 +62,50 @@ final class UpdatesHomebrewRun: Identifiable {
         case finished(succeeded: Bool, output: String)
     }
 
+    /// One app the command updates.
+    struct Item: Sendable, Hashable {
+        var appName: String
+        var appPath: String
+        var cask: UpdatesHomebrewCask
+    }
+
     let id = UUID()
-    let appName: String
-    let appPath: String
-    let cask: UpdatesHomebrewCask
+    let items: [Item]
     let brewPath: String
     private(set) var state: State = .running
     private(set) var startedAt = Date()
     @ObservationIgnored private var task: Task<Void, Never>?
 
-    init(appName: String, appPath: String, cask: UpdatesHomebrewCask, brewPath: String) {
-        self.appName = appName
-        self.appPath = appPath
-        self.cask = cask
+    init(items: [Item], brewPath: String) {
+        self.items = items
         self.brewPath = brewPath
+    }
+
+    convenience init(appName: String, appPath: String, cask: UpdatesHomebrewCask, brewPath: String) {
+        self.init(items: [Item(appName: appName, appPath: appPath, cask: cask)], brewPath: brewPath)
     }
 
     var isRunning: Bool { state == .running }
 
+    /// "Xcode" or "3 apps".
+    var title: String {
+        items.count == 1 ? items[0].appName : "\(items.count) apps"
+    }
+
+    /// Unique tokens of casks that pass the safety check.
+    var tokens: [String] {
+        var seen = Set<String>()
+        return items.map(\.cask).filter(\.hasSafeToken).map(\.upgradeToken).filter { seen.insert($0).inserted }
+    }
+
+    var arguments: [String] { ["upgrade", "--cask"] + tokens }
+    var command: String { "brew " + arguments.joined(separator: " ") }
+
     func start(logger: ActivityLogger, onFinish: @escaping @MainActor (Bool) -> Void) {
-        guard task == nil, cask.hasSafeToken else { return }
+        guard task == nil, !tokens.isEmpty, tokens.count == Set(items.map(\.cask.upgradeToken)).count else { return }
         startedAt = Date()
         let brew = brewPath
-        let arguments = cask.upgradeArguments
+        let arguments = arguments
         task = Task {
             do {
                 let result = try await ProcessRunner.run(
@@ -98,7 +122,7 @@ final class UpdatesHomebrewRun: Identifiable {
                 }
                 if Task.isCancelled { output += "\n\nStopped." }
                 state = .finished(succeeded: result.succeeded, output: output.isEmpty ? "Homebrew finished without output." : output)
-                logger.info("Homebrew cask upgrade finished, exit code \(result.exitCode)", category: .updates)
+                logger.info("Homebrew cask upgrade of \(arguments.count - 2) cask(s) finished, exit code \(result.exitCode)", category: .updates)
                 onFinish(result.succeeded)
             } catch {
                 state = .finished(succeeded: false, output: error.localizedDescription)

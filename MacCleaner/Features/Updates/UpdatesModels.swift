@@ -5,6 +5,8 @@ enum UpdatesSource: String, Sendable, Codable, Hashable, CaseIterable {
     case appStore
     case sparkle
     case homebrew
+    /// Mac Cleaner's own releases on GitHub.
+    case github
     case none
 
     var title: String {
@@ -12,6 +14,7 @@ enum UpdatesSource: String, Sendable, Codable, Hashable, CaseIterable {
         case .appStore: return "App Store"
         case .sparkle: return "Developer feed"
         case .homebrew: return "Homebrew"
+        case .github: return "GitHub"
         case .none: return "—"
         }
     }
@@ -21,6 +24,7 @@ enum UpdatesSource: String, Sendable, Codable, Hashable, CaseIterable {
         case .appStore: return "bag"
         case .sparkle: return "dot.radiowaves.left.and.right"
         case .homebrew: return "mug"
+        case .github: return "chevron.left.forwardslash.chevron.right"
         case .none: return "questionmark.circle"
         }
     }
@@ -44,6 +48,8 @@ enum UpdatesMechanism: Sendable, Hashable {
     case adobeCreativeCloud
     case jetBrains
     case mozilla
+    /// Mac Cleaner itself: GitHub releases, installed from the app after verification.
+    case github
     case none
 
     var hint: String? {
@@ -68,6 +74,8 @@ enum UpdatesMechanism: Sendable, Hashable {
             return "Updated from the app itself or JetBrains Toolbox."
         case .mozilla:
             return "The app updates itself. Check “About” in the app to update."
+        case .github:
+            return "Mac Cleaner checks GitHub for new releases and installs them after verifying the download."
         case .none:
             return nil
         }
@@ -75,8 +83,23 @@ enum UpdatesMechanism: Sendable, Hashable {
 
     var updatesItself: Bool {
         switch self {
-        case .none, .appStore: return false
+        case .none, .appStore, .github: return false
         default: return true
+        }
+    }
+
+    /// Who keeps the app up to date, for apps Mac Cleaner can't check.
+    var updaterName: String? {
+        switch self {
+        case .squirrel, .electronUpdater, .sparkleInApp, .sparkleInsecureFeed, .mozilla: return "The app's own updater"
+        case .microsoftAutoUpdate: return "Microsoft AutoUpdate"
+        case .googleSoftwareUpdate: return "Google's updater"
+        case .adobeCreativeCloud: return "Adobe Creative Cloud"
+        case .jetBrains: return "JetBrains Toolbox"
+        case .sparkleFeed: return "The developer's update feed"
+        case .appStore: return "The App Store"
+        case .github: return "GitHub releases"
+        case .none: return nil
         }
     }
 }
@@ -141,6 +164,8 @@ struct UpdatesCheckResult: Sendable, Codable, Hashable {
     var releaseNotesURL: URL?
     /// Release notes text from the App Store (plain text).
     var releaseNotesText: String?
+    /// Release notes a Sparkle feed embeds in the item's `<description>` (HTML).
+    var releaseNotesHTML: String?
     /// `macappstore://` link to the app's page.
     var storeURL: URL?
     var homebrewToken: String?
@@ -158,18 +183,49 @@ struct UpdatesAppRow: Identifiable, Sendable, Hashable {
     var mechanism: UpdatesMechanism
     var result: UpdatesCheckResult?
     var isChecking = false
+    /// The update shown is a version the person chose to skip (Mac Cleaner itself).
+    var isSkipped = false
 
     var id: String { app.path }
     var name: String { app.name }
     var installedVersion: String { app.info.displayVersion }
     var status: UpdatesStatus { isChecking ? .checking : (result?.status ?? .notChecked) }
     var latestVersion: String? { result?.latestVersion }
+    var isMacCleaner: Bool { mechanism == .github }
+
+    /// The version people see ("4.3.6"), without the build number.
+    var shortInstalledVersion: String {
+        app.info.shortVersion.flatMap { $0.isEmpty ? nil : $0 } ?? app.info.buildVersion ?? "—"
+    }
+
+    /// The latest version without Homebrew's ",build" suffix or a build in parentheses.
+    var shortLatestVersion: String? {
+        guard let latest = latestVersion, !latest.isEmpty else { return nil }
+        var text = UpdatesVersionComparator.homebrewDisplayVersion(latest)
+        if let parenthesis = text.firstIndex(of: "("), parenthesis != text.startIndex {
+            text = String(text[..<parenthesis]).trimmingCharacters(in: .whitespaces)
+        }
+        return text
+    }
+
+    /// "Installed: version 4.3.6 (build 50119) · Latest: 5.1.1", for tooltips.
+    var versionHelp: String {
+        var text = "Installed: version \(shortInstalledVersion)"
+        if let build = app.info.buildVersion, !build.isEmpty, build != app.info.shortVersion {
+            text += " (build \(build))"
+        }
+        if let latest = latestVersion, !latest.isEmpty {
+            text += " · Latest: \(latest)"
+        }
+        return text
+    }
 
     /// The source that can actually be checked for this app.
     var checkableSource: UpdatesSource {
         switch mechanism {
         case .appStore: return .appStore
         case .sparkleFeed: return .sparkle
+        case .github: return .github
         default: return .none
         }
     }
@@ -179,7 +235,12 @@ struct UpdatesAppRow: Identifiable, Sendable, Hashable {
         return checkableSource
     }
 
-    // Sort keys (Table columns sort with key paths to Comparable values).
+    /// The check returned release notes text (App Store text or a feed's HTML).
+    var hasEmbeddedReleaseNotes: Bool {
+        !(result?.releaseNotesText ?? "").isEmpty || !(result?.releaseNotesHTML ?? "").isEmpty
+    }
+
+    // Sort keys.
     var sortName: String { app.sortName }
     var sortInstalled: String { installedVersion }
     var sortLatest: String { latestVersion ?? "" }

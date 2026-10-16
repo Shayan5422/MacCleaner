@@ -32,6 +32,11 @@ enum NumberFormatting {
     static func count(_ value: Int) -> String {
         value.formatted(.number)
     }
+
+    /// "1 file", "12,345 files". `plural` defaults to the noun with an "s".
+    static func count(_ value: Int, _ noun: String, plural: String? = nil) -> String {
+        "\(count(value)) \(value == 1 ? noun : plural ?? noun + "s")"
+    }
 }
 
 enum DateFormatting {

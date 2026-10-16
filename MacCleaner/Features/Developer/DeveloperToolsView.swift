@@ -96,10 +96,10 @@ struct DeveloperToolsView: View {
 
     @ViewBuilder
     private var results: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 12) {
-            StatTile(title: "Recoverable", value: ByteFormatting.string(model.totalRecoverable), caption: "Across \(model.reports.count) tool\(model.reports.count == 1 ? "" : "s")", symbol: "externaldrive", tint: AppSection.developer.tint)
-            StatTile(title: "Rebuilds automatically", value: ByteFormatting.string(model.safeRecoverable), caption: "Caches and build products", symbol: "checkmark.shield", tint: .green)
-            StatTile(title: "Selected", value: ByteFormatting.string(model.selectedBytes), caption: "\(model.selectedItems.count) item\(model.selectedItems.count == 1 ? "" : "s") to remove", symbol: "checklist", tint: .blue)
+        TileRow {
+            StatTile(title: "Recoverable", value: ByteFormatting.string(model.totalRecoverable), caption: "Across \(model.reports.count) tool\(model.reports.count == 1 ? "" : "s")", symbol: "externaldrive", tint: AppSection.developer.tint, fillsHeight: true)
+            StatTile(title: "Rebuilds automatically", value: ByteFormatting.string(model.safeRecoverable), caption: "Caches and build products", symbol: "checkmark.shield", tint: .green, fillsHeight: true)
+            StatTile(title: "Selected", value: ByteFormatting.string(model.selectedBytes), caption: "\(model.selectedItems.count) item\(model.selectedItems.count == 1 ? "" : "s") to remove", symbol: "checklist", tint: .blue, fillsHeight: true)
         }
 
         let visible = model.visibleReports

@@ -1,6 +1,6 @@
 # Architecture
 
-Mac Cleaner is a single native macOS app target written in Swift 6 (strict concurrency) and SwiftUI, with no third-party dependencies. The project is described by `project.yml` ([XcodeGen](https://github.com/yonaskolb/XcodeGen)); the generated `MacCleaner.xcodeproj` is committed so XcodeGen isn't required to build.
+Mac Cleaner is a single native macOS app target written in Swift 6 (strict concurrency) and SwiftUI, with no third-party dependencies (the antivirus engine reads ClamAV's databases with its own Swift code). The project is described by `project.yml` ([XcodeGen](https://github.com/yonaskolb/XcodeGen)); the generated `MacCleaner.xcodeproj` is committed so XcodeGen isn't required to build.
 
 ```
 MacCleaner/
@@ -59,6 +59,38 @@ Each feature can implement `SmartScanProvider`. `SmartScanRunner` runs providers
 ## Automation
 
 `SMAppService.agent` registers `Config/LaunchAgents/com.maccleaner.MacCleaner.automation.plist`. launchd starts the app's own executable with `--run-automation` about once an hour (and coalesces runs missed during sleep); `main.swift` detects the flag and runs `AutomationRunner` headlessly. It exits immediately unless a schedule, storage threshold or daily junk check is due, pauses in Low Power Mode, and only ever removes `.safe`, regenerable candidates from the categories the person picked. "Notify before cleaning" announces a cleanup and performs it on the next check, so it can be skipped.
+
+## Antivirus
+
+```
+ClamAV main/daily (.cvd, .cld) ──► ClamAVContainer: header, MD5 + RSA digital signature, signed .info index
+abuse.ch hash lists ─────────────┘          │
+                                            ▼
+                       AVDatabaseBuilder ──► engine.mcavdb (versioned binary, written to a temp file and renamed)
+                                            │
+                                 AVEngine.load (memory-mapped)
+                                            │
+             scanFile(atPath:) ──► file type (magic) ─► hashes (MD5/SHA-1/SHA-256, PE sections, only for sizes that occur)
+                                   │                 ─► body signatures: rare-anchor prefilter per target type, then full match
+                                   │                 ─► logical signatures: subsignature counts, expressions, PCRE
+                                   └─ archives & universal binaries: zip, gzip, tar, crx, fat Mach-O (in memory, with limits)
+```
+
+* **Definitions** (`AVDefinitionsUpdater`): ClamAV's own **freshclam** when it's installed, otherwise a built-in updater that behaves like it (DNS TXT version checks, signed incremental CDIFF updates, full downloads at most once a day per file, backoff on 403/429). abuse.ch feeds are downloaded and merged with expiry. A new database is compiled next to the old one and swapped in only when it loads; a database written in an older format (`AVDatabaseFormat.version`) is rebuilt from the downloaded definitions.
+* **Scans** (`AVScanService`) enumerate with the Core walker (no symlinks, one volume, exclusions, never opening cloud-only files) and scan on dedicated worker threads. `AVScanPlanner` builds Quick Scan from running programs, launchd jobs, login items, apps, browser extensions and the carrier files in Downloads and Desktop from the last 90 days; quick, Smart Scan and scheduled scans skip Windows and Linux signatures. **Virus Chest** (`AVVirusChest`) moves items with identity re-checks into an obfuscated, 0700 vault; `AVAutoQuarantine` moves only detections backed by signed definitions and never from inside an app bundle.
+* **Shields**: `AVFileShield` (FSEvents with debouncing for in-progress downloads) and `AVDownloadOrigin` (where-from metadata against URLhaus/ThreatFox). `AVEngineHolder.shared` lets other features (Guardian, Smart Scan, Automation) scan with the loaded engine.
+
+## Ports & Network
+
+`PortScanEngine` lists listening sockets with `sysctl`/`libproc`, resolves project roots, frameworks, launch origins and auto-start managers, and builds stop plans (`PortKillPlanner`): the root of the launch up to boundary processes (shells, terminals, IDEs, AI agents), its descendants signalled children first, every PID's start time re-checked right before signalling. `NetConnectionScanner` reads every process's sockets for the Connections tab and the Network Shield; `NetChecker` reads Wi-Fi security (CoreWLAN), routes, DNS and proxies (SystemConfiguration) and the ARP cache.
+
+## Guardian
+
+`GuardianController` runs the **Startup Guard** (snapshots of every startup mechanism, diffs, FSEvents on launch agent folders, the "opened at login" analysis from process start times and `lsappinfo`), the **Web Shield** (new browser history rows, read from APFS clones of the databases, matched against `ThreatIntelRegistry`) and posts to `ProtectionEventLog`, the shared activity feed the menu bar shows.
+
+## Menu bar and app lifecycle
+
+`AppEnvironment.shared` is created once and starts the background services at launch (`startBackgroundServices`), also when the app starts at login without a window. `AppPresence` keeps Mac Cleaner in the menu bar when its windows close (the Dock icon hides while no window is open) and brings the main window back from the menu bar, a notification or a Dock click. `AppUpdateController` checks GitHub once a day; `AppUpdateInstaller` verifies the SHA-256 checksum, the code signature (`identifier "com.maccleaner.MacCleaner" and anchor apple generic and certificate leaf[subject.OU] = "244735TY4Y"`) and notarization before swapping the app atomically.
 
 ## Concurrency
 

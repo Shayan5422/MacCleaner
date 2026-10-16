@@ -58,6 +58,9 @@ struct PageHeader<Trailing: View>: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title ?? section.title)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
+                    // Shrinks a little in a narrow page rather than breaking mid-word.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text(subtitle)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -117,12 +120,15 @@ extension View {
 struct Card<Content: View, Accessory: View>: View {
     var title: String?
     var symbol: String?
+    /// Stretch to the height the layout offers (cards side by side in a `BalancedGrid`).
+    var fillsHeight = false
     @ViewBuilder var accessory: () -> Accessory
     @ViewBuilder var content: () -> Content
 
-    init(_ title: String? = nil, symbol: String? = nil, @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }, @ViewBuilder content: @escaping () -> Content) {
+    init(_ title: String? = nil, symbol: String? = nil, fillsHeight: Bool = false, @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.symbol = symbol
+        self.fillsHeight = fillsHeight
         self.accessory = accessory
         self.content = content
     }
@@ -143,7 +149,7 @@ struct Card<Content: View, Accessory: View>: View {
             }
             content()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: .topLeading)
         .card()
     }
 }
@@ -191,15 +197,22 @@ struct StatTile: View {
     }
 }
 
-/// A row of tiles that all get the height of the tallest one (use `StatTile(fillsHeight: true)`).
+/// A row of tiles that fill the width and all get the height of the tallest one (use
+/// `StatTile(fillsHeight: true)`). When they don't fit side by side, they wrap into
+/// balanced rows (four tiles become 2 × 2, never 3 + 1).
 struct TileRow<Content: View>: View {
+    var minimumTileWidth: CGFloat
     @ViewBuilder var content: () -> Content
 
+    init(minimumTileWidth: CGFloat = 180, @ViewBuilder content: @escaping () -> Content) {
+        self.minimumTileWidth = minimumTileWidth
+        self.content = content
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        BalancedGrid(minimumItemWidth: minimumTileWidth, spacing: 12) {
             content()
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -208,6 +221,10 @@ struct RingGauge<Center: View>: View {
     var fraction: Double
     var tint: Color
     var lineWidth: CGFloat = 10
+    /// Animates changes of `fraction`. Gauges of live values (CPU, memory) turn it off: every
+    /// frame of the animation lays the page out again, which made an open Dashboard use about
+    /// 20% CPU instead of 2%.
+    var animatesChanges = true
     @ViewBuilder var center: () -> Center
 
     var body: some View {
@@ -221,7 +238,7 @@ struct RingGauge<Center: View>: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.6), value: fraction)
+                .animation(animatesChanges ? .easeInOut(duration: 0.6) : nil, value: fraction)
             center()
         }
         .padding(lineWidth / 2)

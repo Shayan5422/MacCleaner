@@ -134,7 +134,7 @@ struct PerformanceCPUCard: View {
     var body: some View {
         PerformancePanel("CPU", symbol: "cpu") {
             HStack(alignment: .center, spacing: 20) {
-                RingGauge(fraction: sample.cpuUsage, tint: PerformancePalette.cpu, lineWidth: 11) {
+                RingGauge(fraction: sample.cpuUsage, tint: PerformancePalette.cpu, lineWidth: 11, animatesChanges: false) {
                     VStack(spacing: 0) {
                         Text(sample.isCPUAvailable ? NumberFormatting.percent(sample.cpuUsage) : "—")
                             .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -152,16 +152,100 @@ struct PerformanceCPUCard: View {
                     KeyValueRow(key: "System", value: NumberFormatting.percent(sample.cpuSystemUsage))
                     KeyValueRow(key: "Idle", value: NumberFormatting.percent(max(0, 1 - sample.cpuUsage)))
                     if let load = sample.loadAverage {
-                        KeyValueRow(key: "Load average", value: [load.oneMinute, load.fiveMinutes, load.fifteenMinutes]
-                            .map { $0.formatted(.number.precision(.fractionLength(2))) }.joined(separator: "  "))
-                            .help("Average number of threads running or waiting over the last 1, 5 and 15 minutes.")
+                        let values = [load.oneMinute, load.fiveMinutes, load.fifteenMinutes].map { $0.formatted(.number.precision(.fractionLength(2))) }
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Load average").foregroundStyle(.secondary)
+                            Spacer(minLength: 12)
+                            // All three values when they fit, otherwise the last minute's.
+                            ViewThatFits(in: .horizontal) {
+                                Text(values.joined(separator: "  "))
+                                Text(values[0])
+                            }
+                            .monospacedDigit()
+                        }
+                        .font(.callout)
+                        .help("Average number of threads running or waiting over the last 1, 5 and 15 minutes: \(values.joined(separator: ", ")).")
                     }
-                    Text(topology.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
             }
+            if sample.isCPUAvailable {
+                Divider()
+                PerformanceCoreClusters(sample: sample, topology: topology)
+            }
         }
+    }
+}
+
+/// Average load of the performance and efficiency cores (or of all cores), and the
+/// busiest core — the CPU card's counterpart to the memory card's composition.
+struct PerformanceCoreClusters: View {
+    var sample: PerformanceSample
+    var topology: PerformanceCPUTopology
+
+    private struct Cluster {
+        var title: String
+        var usage: Double
+        var color: Color
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(clusters, id: \.title) { cluster in
+                HStack(spacing: 10) {
+                    Text(cluster.title)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .frame(minWidth: 120, alignment: .leading)
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.primary.opacity(0.07))
+                            Capsule().fill(cluster.color.gradient)
+                                .frame(width: max(4, proxy.size.width * CGFloat(min(1, max(0, cluster.usage)))))
+                        }
+                    }
+                    .frame(height: 8)
+                    Text(NumberFormatting.percent(cluster.usage))
+                        .font(.caption.monospacedDigit())
+                        .frame(width: 38, alignment: .trailing)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(cluster.title)
+                .accessibilityValue(NumberFormatting.percent(cluster.usage))
+            }
+            if let busiest {
+                Text("Busiest core: \(topology.label(forCore: busiest.index)) at \(NumberFormatting.percent(busiest.usage)) · \(topology.summary)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var clusters: [Cluster] {
+        let usage = sample.perCoreUsage
+        if let kinds = topology.coreKinds, kinds.count == usage.count {
+            let performance = zip(kinds, usage).filter { $0.0 == .performance }.map(\.1)
+            let efficiency = zip(kinds, usage).filter { $0.0 == .efficiency }.map(\.1)
+            var result: [Cluster] = []
+            if !performance.isEmpty {
+                result.append(Cluster(title: "Performance cores (\(performance.count))", usage: average(performance), color: PerformancePalette.performanceCore))
+            }
+            if !efficiency.isEmpty {
+                result.append(Cluster(title: "Efficiency cores (\(efficiency.count))", usage: average(efficiency), color: PerformancePalette.efficiencyCore))
+            }
+            if !result.isEmpty { return result }
+        }
+        return [Cluster(title: "All \(usage.count) cores", usage: average(usage), color: PerformancePalette.cpu)]
+    }
+
+    private var busiest: (index: Int, usage: Double)? {
+        sample.perCoreUsage.enumerated().max { $0.element < $1.element }.map { ($0.offset, $0.element) }
+    }
+
+    private func average(_ values: [Double]) -> Double {
+        values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
     }
 }
 
@@ -230,7 +314,7 @@ struct PerformanceMemoryCard: View {
         let memory = sample.memory
         PerformancePanel("Memory", symbol: "memorychip") {
             HStack(alignment: .center, spacing: 20) {
-                RingGauge(fraction: sample.memoryUsedFraction, tint: sample.memoryPressure.tint, lineWidth: 11) {
+                RingGauge(fraction: sample.memoryUsedFraction, tint: sample.memoryPressure.tint, lineWidth: 11, animatesChanges: false) {
                     VStack(spacing: 0) {
                         Text(PerformanceFormat.memory(sample.memoryUsed))
                             .font(.system(size: 18, weight: .bold, design: .rounded))
@@ -557,9 +641,13 @@ struct PerformanceProcessesCard: View {
         }
         if let restricted = model.monitor.restrictedProcessCount, restricted > 0 {
             if model.processScope == .all {
-                text += " \(NumberFormatting.count(restricted)) processes belong to macOS or other users: only their name and owner are shown, because macOS doesn't let apps read their CPU and memory use."
+                text += restricted == 1
+                    ? " 1 process belongs to macOS or another user: only its name and owner are shown, because macOS doesn't let apps read its CPU and memory use."
+                    : " \(NumberFormatting.count(restricted)) processes belong to macOS or other users: only their name and owner are shown, because macOS doesn't let apps read their CPU and memory use."
             } else {
-                text += " \(NumberFormatting.count(restricted)) processes owned by macOS or other users aren't listed here (choose All Processes to see them with limited details)."
+                text += restricted == 1
+                    ? " 1 process owned by macOS or another user isn't listed here (choose All Processes to see it with limited details)."
+                    : " \(NumberFormatting.count(restricted)) processes owned by macOS or other users aren't listed here (choose All Processes to see them with limited details)."
             }
         }
         if !model.monitor.processesMeasured {

@@ -402,7 +402,7 @@ struct StorageCategoriesView: View {
                             .frame(width: 24)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(category.title).font(.callout.weight(.medium))
-                            Text("\(NumberFormatting.count(statistics.count(for: category))) files")
+                            Text("\(NumberFormatting.count(statistics.count(for: category), "file"))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -435,17 +435,18 @@ struct StorageDownloadsView: View {
     var body: some View {
         if let summary = model.downloadsSummary {
             VStack(alignment: .leading, spacing: 12) {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], spacing: 10) {
-                    StatTile(title: "Downloads", value: ByteFormatting.string(summary.total), caption: nil, symbol: "arrow.down.circle", tint: AppSection.storage.tint)
+                TileRow(minimumTileWidth: 180) {
+                    StatTile(title: "Downloads", value: ByteFormatting.string(summary.total), caption: "Everything in the Downloads folder",
+                             symbol: "arrow.down.circle", tint: AppSection.storage.tint, fillsHeight: true)
                     StatTile(title: "Installers & Disk Images", value: ByteFormatting.string(summary.installers),
                              caption: "\(summary.installerCount) item\(summary.installerCount == 1 ? "" : "s"); usually not needed after installing",
-                             symbol: StorageCategory.diskImages.symbolName, tint: StorageCategory.diskImages.color)
+                             symbol: StorageCategory.diskImages.symbolName, tint: StorageCategory.diskImages.color, fillsHeight: true)
                     StatTile(title: "Archives", value: ByteFormatting.string(summary.archives),
                              caption: "\(summary.archiveCount) item\(summary.archiveCount == 1 ? "" : "s")",
-                             symbol: StorageCategory.archives.symbolName, tint: StorageCategory.archives.color)
+                             symbol: StorageCategory.archives.symbolName, tint: StorageCategory.archives.color, fillsHeight: true)
                     StatTile(title: "Unused for \(summary.oldAgeDays) Days", value: ByteFormatting.string(summary.old),
                              caption: "\(summary.oldCount) item\(summary.oldCount == 1 ? "" : "s")",
-                             symbol: "clock", tint: .secondary)
+                             symbol: "clock", tint: .secondary, fillsHeight: true)
                 }
                 if model.downloadsRows.isEmpty {
                     EmptyStateView(title: "Downloads Is Empty", symbol: "checkmark.circle", message: "There's nothing in your Downloads folder.")

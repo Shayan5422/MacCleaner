@@ -13,7 +13,7 @@ struct SecurityFindingsTab: View {
                 title: model.searchText.isEmpty ? "No Threats or Suspicious Items" : "No Matching Findings",
                 symbol: model.searchText.isEmpty ? "checkmark.shield" : "magnifyingglass",
                 message: model.searchText.isEmpty
-                    ? "Nothing unusual was found in the \(report.persistenceItems.count) startup items, \(report.applications.count) apps and \(report.quarantinedFiles.count) downloads Mac Cleaner reviewed."
+                    ? "Nothing unusual was found in the \(NumberFormatting.count(report.persistenceItems.count, "startup item")), \(NumberFormatting.count(report.applications.count, "app")) and \(NumberFormatting.count(report.quarantinedFiles.count, "download")) Mac Cleaner reviewed."
                     : "No findings match “\(model.searchText)”."
             )
         } else {

@@ -50,7 +50,7 @@ struct StorageAnalyzerView: View {
         case .ready:
             if let tree = model.tree {
                 let age = Date().timeIntervalSince(tree.scanDate) < 60 ? "just now" : DateFormatting.relative(tree.scanDate)
-                return "\(ByteFormatting.string(tree.root.size)) in \(NumberFormatting.count(tree.statistics.fileCount)) files · scanned \(age)"
+                return "\(ByteFormatting.string(tree.root.size)) in \(NumberFormatting.count(tree.statistics.fileCount, "file")) · scanned \(age)"
             }
             return "Find what's using space."
         default:
@@ -115,7 +115,7 @@ struct StorageAnalyzerView: View {
         guard let progress = model.progress else { return "Starting…" }
         switch progress.phase {
         case .reading:
-            let counts = "\(NumberFormatting.count(progress.directoriesRead)) folders · \(NumberFormatting.count(progress.itemsSeen)) items · \(ByteFormatting.string(progress.bytesCounted))"
+            let counts = "\(NumberFormatting.count(progress.directoriesRead, "folder")) · \(NumberFormatting.count(progress.itemsSeen, "item")) · \(ByteFormatting.string(progress.bytesCounted))"
             guard !progress.currentPath.isEmpty else { return counts }
             return counts + " — " + PathUtilities.abbreviate(PathUtilities.firmlinkCanonical(progress.currentPath))
         case .summarizing:
@@ -340,33 +340,33 @@ struct StorageStatTiles: View {
 
     var body: some View {
         let stats = tree.statistics
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 150), spacing: 12, alignment: .top), count: 4), spacing: 12) {
+        TileRow(minimumTileWidth: 200) {
             StatTile(
                 title: "Scanned", value: ByteFormatting.string(tree.root.size),
-                caption: "\(NumberFormatting.count(stats.fileCount)) files in \(NumberFormatting.count(stats.directoryCount)) folders",
-                symbol: "internaldrive", tint: AppSection.storage.tint
+                caption: "\(NumberFormatting.count(stats.fileCount, "file")) in \(NumberFormatting.count(stats.directoryCount, "folder"))",
+                symbol: "internaldrive", tint: AppSection.storage.tint, fillsHeight: true
             )
             StatTile(
                 title: "Large Files", value: NumberFormatting.count(model.largestRows.count),
                 caption: "\(model.largeFileThresholdDescription) or more · \(ByteFormatting.string(model.largestRows.reduce(0) { $0 + $1.size }))",
-                symbol: "doc.richtext", tint: StorageCategory.videos.color
+                symbol: "doc.richtext", tint: StorageCategory.videos.color, fillsHeight: true
             )
             StatTile(
                 title: "Old Files", value: NumberFormatting.count(model.oldRows.count),
                 caption: "Unused for \(model.services.settings.oldFileAgeDays) days · \(ByteFormatting.string(model.oldRows.reduce(0) { $0 + $1.size }))",
-                symbol: "clock", tint: StorageCategory.archives.color
+                symbol: "clock", tint: StorageCategory.archives.color, fillsHeight: true
             )
             if stats.cloudOnlyFileCount > 0 {
                 StatTile(
                     title: "In the Cloud Only", value: NumberFormatting.count(stats.cloudOnlyFileCount),
                     caption: "\(ByteFormatting.string(stats.cloudOnlyLogicalBytes)) not stored on this Mac",
-                    symbol: "icloud", tint: AppSection.cloud.tint
+                    symbol: "icloud", tint: AppSection.cloud.tint, fillsHeight: true
                 )
             } else {
                 StatTile(
                     title: "Scan Time", value: DateFormatting.duration(max(1, tree.duration)),
-                    caption: "\(NumberFormatting.count(stats.packageCount)) apps and packages measured whole",
-                    symbol: "timer", tint: .secondary
+                    caption: "\(NumberFormatting.count(stats.packageCount, "app or package", plural: "apps and packages")) measured whole",
+                    symbol: "timer", tint: .secondary, fillsHeight: true
                 )
             }
         }
@@ -379,7 +379,9 @@ struct StorageUnreadableSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            FullDiskAccessBanner(reason: "\(NumberFormatting.count(statistics.unreadableCount)) folders couldn't be read, so their contents aren't in the totals.")
+            FullDiskAccessBanner(reason: statistics.unreadableCount == 1
+                                         ? "1 folder couldn't be read, so its contents aren't in the totals."
+                                         : "\(NumberFormatting.count(statistics.unreadableCount)) folders couldn't be read, so their contents aren't in the totals.")
             DisclosureGroup(isExpanded: $isExpanded) {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(statistics.unreadablePaths.prefix(60), id: \.self) { path in
@@ -398,7 +400,7 @@ struct StorageUnreadableSection: View {
                 }
                 .padding(.top, 6)
             } label: {
-                Label("\(NumberFormatting.count(statistics.unreadableCount)) folders couldn't be read", systemImage: "lock")
+                Label("\(NumberFormatting.count(statistics.unreadableCount, "folder")) couldn't be read", systemImage: "lock")
                     .font(.callout)
             }
         }

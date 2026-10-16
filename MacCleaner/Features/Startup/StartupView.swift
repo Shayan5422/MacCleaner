@@ -1,22 +1,61 @@
 import SwiftUI
 
-/// Startup & Background Activity Manager.
+/// The parts of the Startup Items page.
+enum StartupPage: String, CaseIterable, Identifiable {
+    case items, openedAtLogin, changes, everything
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .items: return "Startup Items"
+        case .openedAtLogin: return "Opened at Login"
+        case .changes: return "Changes"
+        case .everything: return "Background Items"
+        }
+    }
+}
+
+/// Startup & Background Activity Manager, with Guardian's view of what opened at login,
+/// what changed and every other way software starts automatically.
 struct StartupView: View {
     @Bindable var model: StartupViewModel
+    var startupGuard: StartupGuardModel
 
     var body: some View {
         PageScroll {
             PageHeader(section: .startup, subtitle: "Apps and background services that start automatically. Turn off what you don't need.") {
                 StartupHeaderActions(model: model)
             }
-            if let message = model.statusMessage {
-                StartupStatusBanner(message: message) { model.statusMessage = nil }
+            Picker("Show", selection: $model.page) {
+                ForEach(StartupPage.allCases) { page in
+                    Text(page.title).tag(page)
+                }
             }
-            if model.inventory == nil {
-                ScanProgressCard(title: "Reading startup items…", message: model.progressMessage,
-                                 fraction: model.isLoading ? model.progress : nil, tint: AppSection.startup.tint)
-            } else {
-                StartupContent(model: model)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .accessibilityLabel("Startup Items sections")
+
+            switch model.page {
+            case .items:
+                if let message = model.statusMessage {
+                    StartupStatusBanner(message: message) { model.statusMessage = nil }
+                }
+                if model.inventory == nil {
+                    ScanProgressCard(title: "Reading startup items…", message: model.progressMessage,
+                                     fraction: model.isLoading ? model.progress : nil, tint: AppSection.startup.tint)
+                } else {
+                    StartupContent(model: model)
+                }
+            case .openedAtLogin:
+                StartupGuardReopenCard(model: startupGuard)
+                StartupGuardOpenedAtLoginView(model: startupGuard)
+            case .changes:
+                StartupGuardChangesView(model: startupGuard)
+            case .everything:
+                StartupGuardBackgroundItemsView(model: startupGuard)
+                StartupGuardMoreItemsView(model: startupGuard)
             }
         }
         .searchable(text: $model.searchText, placement: .toolbar, prompt: "Search startup items")
@@ -77,6 +116,7 @@ private struct StartupHeaderActions: View {
             }
             .help("Open System Settings › General › Login Items & Extensions")
         }
+        .fixedSize()
     }
 }
 
@@ -133,34 +173,38 @@ private struct StartupSummaryTiles: View {
     var model: StartupViewModel
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
+        TileRow {
             StatTile(
                 title: "Open at Login",
                 value: model.loginItemsAccess == .granted ? NumberFormatting.count(model.loginItemCount) : "—",
-                caption: model.loginItemsAccess == .granted ? "apps" : "Access needed",
+                caption: model.loginItemsAccess == .granted ? "Apps that open when you log in" : "Access needed",
                 symbol: StartupItemKind.loginItem.symbolName,
-                tint: AppSection.startup.tint
+                tint: AppSection.startup.tint,
+                fillsHeight: true
             )
             StatTile(
                 title: "Your Launch Agents",
                 value: "\(model.runningUserAgentCount) running",
                 caption: "\(model.userAgentCount) in your Library",
                 symbol: StartupItemKind.userAgent.symbolName,
-                tint: .blue
+                tint: .blue,
+                fillsHeight: true
             )
             StatTile(
                 title: "App Background Items",
                 value: NumberFormatting.count(model.appItemCount),
                 caption: "\(model.systemItemCount) system-wide items",
                 symbol: StartupItemKind.appBackgroundItem.symbolName,
-                tint: .purple
+                tint: .purple,
+                fillsHeight: true
             )
             StatTile(
                 title: "Needs Review",
                 value: NumberFormatting.count(model.needsReviewCount),
-                caption: model.needsReviewCount == 0 ? "Nothing looks unnecessary" : "may be unnecessary",
+                caption: model.needsReviewCount == 0 ? "Nothing looks unnecessary" : "May be unnecessary",
                 symbol: model.needsReviewCount == 0 ? "checkmark.circle" : "exclamationmark.circle",
-                tint: model.needsReviewCount == 0 ? .green : .orange
+                tint: model.needsReviewCount == 0 ? .green : .orange,
+                fillsHeight: true
             )
         }
     }

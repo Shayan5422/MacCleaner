@@ -261,7 +261,7 @@ struct CandidateContentsSheet: View {
                 Spacer()
                 VStack(alignment: .trailing) {
                     SizeText(bytes: candidate.usage.allocatedBytes, font: .headline)
-                    Text("\(NumberFormatting.count(candidate.usage.fileCount)) files").font(.caption).foregroundStyle(.secondary)
+                    Text("\(NumberFormatting.count(candidate.usage.fileCount, "file"))").font(.caption).foregroundStyle(.secondary)
                 }
             }
             if isLoading {
@@ -289,7 +289,7 @@ struct CandidateContentsSheet: View {
                     .width(90)
                 }
                 .frame(minHeight: 300)
-                Text(files.count == 200 ? "Showing the 200 largest files." : "Showing all \(files.count) files.")
+                Text(files.count == 200 ? "Showing the 200 largest files." : files.count == 1 ? "Showing 1 file." : "Showing all \(files.count) files.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

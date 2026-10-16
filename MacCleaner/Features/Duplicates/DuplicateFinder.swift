@@ -60,7 +60,7 @@ struct DuplicateFinder: Sendable {
         try Task.checkCancellation()
         progress(DuplicateScanProgress(
             stage: .groupingBySize, fraction: nil,
-            message: "Grouping \(NumberFormatting.count(collection.files.count)) files by size…"
+            message: "Grouping \(NumberFormatting.count(collection.files.count, "file")) by size…"
         ))
         let inodes = DuplicateInode.collapse(collection.files)
         result.hardLinkSets = inodes.compactMap(\.hardLinkSet).sorted { $0.allocatedSize > $1.allocatedSize }
@@ -104,7 +104,7 @@ struct DuplicateFinder: Sendable {
                 if throttle.shouldReport(force: done == partialTotal) {
                     progress(DuplicateScanProgress(
                         stage: .partialHash, fraction: Double(done) / Double(partialTotal),
-                        message: "Partial hash: \(NumberFormatting.count(done)) of \(NumberFormatting.count(partialTotal)) files"
+                        message: "Partial hash: \(NumberFormatting.count(done)) of \(NumberFormatting.count(partialTotal, "file"))"
                     ))
                 }
             }
@@ -143,7 +143,7 @@ struct DuplicateFinder: Sendable {
         let fullDoneBytes = DuplicateLockedBox<Int64>(0)
         progress(DuplicateScanProgress(
             stage: .fullHash, fraction: fullTargets.isEmpty ? 1 : 0,
-            message: "Verifying \(NumberFormatting.count(fullTargets.count)) files (\(ByteFormatting.string(fullTotalBytes)))…"
+            message: "Verifying \(NumberFormatting.count(fullTargets.count, "file")) (\(ByteFormatting.string(fullTotalBytes)))…"
         ))
         let fullResults = try await DuplicateWorkQueue.run(fullTargets, limits: fullLimits, device: { $0.target.identity.device }) { item in
             try DuplicateHasher.fullDigest(of: item.target, cancellation: cancellation) { count in
@@ -227,7 +227,7 @@ struct DuplicateFinder: Sendable {
     }
 
     static func scanningMessage(_ snapshot: WalkProgress.Snapshot) -> String {
-        let count = "\(NumberFormatting.count(snapshot.entriesSeen)) items checked"
+        let count = "\(NumberFormatting.count(snapshot.entriesSeen, "item")) checked"
         guard !snapshot.currentPath.isEmpty else { return count }
         return count + " · " + PathUtilities.abbreviate(snapshot.currentPath)
     }

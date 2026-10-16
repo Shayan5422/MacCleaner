@@ -53,27 +53,30 @@ struct DuplicateResultsPage: View {
     }
 
     private var summary: some View {
-        HStack(spacing: 12) {
+        TileRow {
             StatTile(
                 title: "Duplicate groups",
                 value: NumberFormatting.count(model.groups.count),
                 caption: "Files with identical copies",
                 symbol: "square.on.square",
-                tint: tint
+                tint: tint,
+                fillsHeight: true
             )
             StatTile(
                 title: "Extra copies",
                 value: NumberFormatting.count(model.duplicateFileCount),
                 caption: "One copy is always kept",
                 symbol: "doc.on.doc",
-                tint: .blue
+                tint: .blue,
+                fillsHeight: true
             )
             StatTile(
                 title: "Reclaimable",
                 value: ByteFormatting.string(model.totalReclaimable),
                 caption: "Keeping \(model.keepRule.keptCopyPhrase)",
                 symbol: "internaldrive",
-                tint: .green
+                tint: .green,
+                fillsHeight: true
             )
         }
     }
@@ -146,7 +149,7 @@ struct DuplicateScanNotes: View {
     var body: some View {
         if let result = model.exactResult {
             HStack(spacing: 8) {
-                Text("\(NumberFormatting.count(result.filesExamined)) files checked in \(DateFormatting.duration(max(1, result.duration)))")
+                Text("\(NumberFormatting.count(result.filesExamined, "file")) checked in \(DateFormatting.duration(max(1, result.duration)))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if !result.hardLinkSets.isEmpty {
@@ -252,9 +255,16 @@ struct DuplicateGroupRow: View {
                 Text(group.displayName)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                // As much of "3 copies · 4.2 MB each · APFS clones" as fits on one line.
+                ViewThatFits(in: .horizontal) {
+                    Text(subtitle)
+                    Text("\(group.files.count) copies · \(ByteFormatting.string(group.contentSize)) each")
+                    Text("\(group.files.count) copies")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .help(subtitle)
             }
             Spacer(minLength: 6)
             VStack(alignment: .trailing, spacing: 2) {

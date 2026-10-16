@@ -9,20 +9,17 @@ enum UpdatesPasteboard {
     }
 }
 
-/// Details and actions for the selected app.
-struct UpdatesDetailPanel: View {
+/// Details and actions of the inspected app, in the panel beside the list.
+struct UpdatesInspector: View {
     @Bindable var model: UpdatesViewModel
+    var onUpdateMacCleaner: () -> Void
 
     var body: some View {
         Group {
-            if let row = model.selectedRow {
-                UpdatesAppDetail(model: model, row: row)
+            if let row = model.inspectedRow {
+                UpdatesAppDetail(model: model, row: row, onUpdateMacCleaner: onUpdateMacCleaner)
             } else {
-                ContentUnavailableView(
-                    "Select an App",
-                    systemImage: "arrow.down.app",
-                    description: Text("See where its updates come from and how to install them.")
-                )
+                ContentUnavailableView("No App Selected", systemImage: "arrow.down.app", description: Text("Click ⓘ next to an app to see where its updates come from."))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -33,37 +30,46 @@ struct UpdatesDetailPanel: View {
 private struct UpdatesAppDetail: View {
     @Bindable var model: UpdatesViewModel
     var row: UpdatesAppRow
+    var onUpdateMacCleaner: () -> Void
     @State private var copied = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
-                statusCard
                 actions
+                statusCard
                 if let cask = model.homebrewCask(for: row) {
                     homebrewCard(cask)
                 }
-                if let notes = row.result?.releaseNotesText, !notes.isEmpty {
-                    releaseNotes(notes)
+                if model.hasReleaseNotes(row) {
+                    releaseNotesCard
                 }
-                appDataCard
+                if !row.isMacCleaner {
+                    appDataCard
+                }
             }
             .padding(16)
         }
         .onChange(of: row.id) { copied = false }
+        .task(id: row.id) {
+            if model.hasReleaseNotes(row), row.hasEmbeddedReleaseNotes || row.isMacCleaner { model.loadReleaseNotes(row) }
+        }
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            FileIcon(path: row.app.path, size: 56)
+        HStack(alignment: .top, spacing: 12) {
+            FileIcon(path: row.app.path, size: 52)
             VStack(alignment: .leading, spacing: 4) {
                 Text(row.name)
                     .font(.title3.weight(.semibold))
                     .lineLimit(2)
-                Text("Version \(row.installedVersion)")
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Version \(row.shortInstalledVersion)")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .help(row.versionHelp)
                 HStack(spacing: 4) {
                     UpdatesStatusBadge(status: row.status)
                     if row.result?.isCritical == true, row.status == .updateAvailable {
@@ -71,13 +77,89 @@ private struct UpdatesAppDetail: View {
                     }
                 }
             }
+            // The name gets the room first, so it doesn't break mid-word beside the spacer.
+            .layoutPriority(1)
             Spacer(minLength: 0)
+            Button {
+                model.inspectedRowID = nil
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.tertiary)
+            }
+            .buttonStyle(.borderless)
+            .help("Close (Esc)")
+            .accessibilityLabel("Close details")
         }
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            switch model.updateAction(for: row) {
+            case .appStore:
+                primaryButton("Update in App Store", symbol: "bag") { model.performUpdate(row) }
+            case .homebrew:
+                primaryButton("Update with Homebrew…", symbol: "mug") { model.performUpdate(row) }
+                    .disabled(model.homebrewRun?.isRunning == true)
+            case .macCleaner:
+                primaryButton("Download & Install…", symbol: "arrow.down.circle", action: onUpdateMacCleaner)
+            case .openApp:
+                primaryButton("Open \(row.name)", symbol: "arrow.up.forward.app") { model.openApp(row) }
+                Text("\(row.name) installs updates with its own updater. If it doesn't offer \(row.shortLatestVersion ?? "the update") right away, choose “Check for Updates…” in the app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            case .none:
+                if !row.isMacCleaner {
+                    Button {
+                        model.openApp(row)
+                    } label: {
+                        Label("Open \(row.name)", systemImage: "arrow.up.forward.app")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .controlSize(.large)
+                }
+            }
+            HStack {
+                if let url = row.result?.releaseNotesURL {
+                    Button {
+                        NSWorkspace.shared.open(url)
+                    } label: {
+                        Label(row.displaySource == .homebrew ? "Website" : (row.isMacCleaner ? "GitHub" : "Release Notes Page"), systemImage: "safari")
+                    }
+                    .help(url.absoluteString)
+                }
+                Spacer()
+                if !row.isMacCleaner {
+                    Button {
+                        FinderActions.reveal(row.app.path)
+                    } label: {
+                        Label("Reveal in Finder", systemImage: "folder")
+                    }
+                }
+            }
+            .buttonStyle(.borderless)
+            .font(.callout)
+        }
+    }
+
+    private func primaryButton(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .tint(AppSection.updates.tint)
+        .controlSize(.large)
     }
 
     private var statusCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            KeyValueRow(key: "Installed", value: row.installedVersion)
+            KeyValueRow(key: "Installed", value: row.shortInstalledVersion)
+            if let build = row.app.info.buildVersion, !build.isEmpty, build != row.app.info.shortVersion {
+                KeyValueRow(key: "Build", value: build)
+            }
             KeyValueRow(key: "Latest", value: row.latestVersion ?? "—", valueColor: row.status == .updateAvailable ? AppSection.updates.tint : .primary)
             KeyValueRow(key: "Source", value: sourceText)
             if let date = row.result?.releaseDate {
@@ -86,38 +168,30 @@ private struct UpdatesAppDetail: View {
             if let minimum = row.result?.minimumSystemVersion, !minimum.isEmpty {
                 KeyValueRow(key: "Requires", value: "macOS \(minimum) or later")
             }
-            if let checked = row.result?.checkedAt, row.status != .checking {
+            if let checked = row.result?.checkedAt, !row.isChecking {
                 KeyValueRow(key: "Checked", value: DateFormatting.relative(checked))
             }
             KeyValueRow(key: "Size", value: row.app.usage.map { ByteFormatting.string($0.allocatedBytes) } ?? "Measuring…")
-            KeyValueRow(key: "Last used", value: row.app.lastUsed.map { DateFormatting.relative($0) } ?? "No record")
+            if !row.isMacCleaner {
+                KeyValueRow(key: "Last used", value: row.app.lastUsed.map { DateFormatting.relative($0) } ?? "No record")
+            }
             Divider()
             Text(explanation)
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .card(padding: 12)
     }
 
     private var sourceText: String {
-        switch row.displaySource {
-        case .none:
-            switch row.mechanism {
-            case .squirrel, .electronUpdater, .sparkleInApp, .sparkleInsecureFeed, .mozilla: return "The app's own updater"
-            case .microsoftAutoUpdate: return "Microsoft AutoUpdate"
-            case .googleSoftwareUpdate: return "Google's updater"
-            case .adobeCreativeCloud: return "Adobe Creative Cloud"
-            case .jetBrains: return "JetBrains"
-            default: return "None found"
-            }
-        default:
-            return row.displaySource.title
-        }
+        if row.displaySource != .none { return row.displaySource.title }
+        return row.mechanism.updaterName ?? "None found"
     }
 
     private var explanation: String {
-        if row.status == .checking { return "Checking…" }
+        if row.isChecking { return "Checking…" }
         if let detail = row.result?.detail, !detail.isEmpty {
             if let hint = row.mechanism.hint, row.result?.source == .homebrew, row.mechanism.updatesItself {
                 return detail + " " + hint
@@ -127,60 +201,8 @@ private struct UpdatesAppDetail: View {
         switch row.checkableSource {
         case .appStore: return "Check for updates to compare this version with the App Store."
         case .sparkle: return "Check for updates to read the developer's update feed."
+        case .github: return "Check for updates to ask GitHub for the newest release."
         default: return row.mechanism.hint ?? "Check for updates to see whether Homebrew knows this app. Otherwise no reliable update information is available."
-        }
-    }
-
-    @ViewBuilder
-    private var actions: some View {
-        VStack(spacing: 8) {
-            if row.result?.storeURL != nil {
-                Button {
-                    model.openInAppStore(row)
-                } label: {
-                    Label(row.status == .updateAvailable ? "Update in App Store" : "Open in App Store", systemImage: "bag")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(AppSection.updates.tint)
-                .controlSize(.large)
-            }
-            Button {
-                model.openApp(row)
-            } label: {
-                Label("Open \(row.name)", systemImage: "arrow.up.forward.app")
-                    .frame(maxWidth: .infinity)
-            }
-            .controlSize(.large)
-            if usesInAppUpdater && row.status == .updateAvailable {
-                Text("Choose “Check for Updates…” in the app's menu to install the update the developer's way.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            HStack {
-                if row.result?.releaseNotesURL != nil {
-                    Button {
-                        model.openReleaseNotes(row)
-                    } label: {
-                        Label(row.result?.source == .homebrew ? "Website" : "Release Notes", systemImage: "doc.text")
-                    }
-                }
-                Spacer()
-                Button {
-                    FinderActions.reveal(row.app.path)
-                } label: {
-                    Label("Reveal in Finder", systemImage: "folder")
-                }
-            }
-            .buttonStyle(.borderless)
-        }
-    }
-
-    private var usesInAppUpdater: Bool {
-        switch row.mechanism {
-        case .sparkleFeed, .sparkleInApp, .sparkleInsecureFeed, .squirrel, .electronUpdater: return true
-        default: return false
         }
     }
 
@@ -213,27 +235,38 @@ private struct UpdatesAppDetail: View {
             }
             .padding(8)
             .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            if row.status == .updateAvailable, row.displaySource == .homebrew || row.result?.homebrewToken != nil {
-                Button("Run Update…") { model.requestHomebrewUpgrade(row) }
-                    .disabled(model.brewPath == nil || !cask.hasSafeToken || model.homebrewRun?.isRunning == true)
-                    .help("Runs the command after you confirm and shows Homebrew's output")
+            if model.canUpgradeWithHomebrew(row), model.updateAction(for: row) != .homebrew {
+                Button("Update with Homebrew Instead…") {
+                    model.requestHomebrewUpgrade(row)
+                }
+                .disabled(model.homebrewRun?.isRunning == true)
+                .help("Runs the command after you confirm and shows Homebrew's output")
             }
         }
         .card(padding: 12)
     }
 
-    private func releaseNotes(_ notes: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+    @ViewBuilder
+    private var releaseNotesCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
             Text("What's New").font(.headline)
-            ScrollView {
-                Text(notes)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            switch model.notes[row.id] {
+            case .loaded(let document)?:
+                ReleaseNotesView(document: document)
+            case .loading?:
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading the release notes…").font(.caption).foregroundStyle(.secondary)
+                }
+            case .failed(let message)?:
+                Text(message).font(.caption).foregroundStyle(.secondary)
+            case nil:
+                Button("Show Release Notes") { model.loadReleaseNotes(row) }
+                    .buttonStyle(.link)
+                    .help("Reads the developer's release notes page")
             }
-            .frame(maxHeight: 160)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .card(padding: 12)
     }
 
@@ -278,6 +311,159 @@ private struct UpdatesAppDetail: View {
     }
 }
 
+/// Status of one app.
+struct UpdatesStatusBadge: View {
+    var status: UpdatesStatus
+
+    var body: some View {
+        Badge(text: status.title, symbol: status.symbol, tint: tint)
+    }
+
+    private var tint: Color {
+        switch status {
+        case .updateAvailable: return AppSection.updates.tint
+        case .upToDate: return .green
+        case .incompatible: return .orange
+        case .failed: return .red
+        case .checking, .notChecked, .unknown: return .gray
+        }
+    }
+}
+
+// MARK: - Update All
+
+/// Explains how each available update is installed, then updates the App Store and
+/// Homebrew apps together.
+struct UpdatesUpdateAllSheet: View {
+    @Bindable var model: UpdatesViewModel
+    var onUpdateMacCleaner: () -> Void
+    @State private var openAppStore = true
+    @State private var runHomebrew = true
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let plan = model.updateAllPlan
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                IconTile(section: .updates, size: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Update All Apps").font(.title3.weight(.semibold))
+                    Text("\(model.availableUpdateCount) update\(model.availableUpdateCount == 1 ? "" : "s") available. Here's how each one is installed.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    if !plan.appStore.isEmpty {
+                        group(
+                            toggle: $openAppStore,
+                            title: "App Store",
+                            symbol: "bag",
+                            names: plan.appStore.map(\.name),
+                            explanation: "Opens the App Store's Updates page, where these apps are updated."
+                        )
+                    }
+                    if !plan.homebrew.isEmpty, let brew = model.brewPath {
+                        let run = UpdatesHomebrewRun(items: plan.homebrew, brewPath: brew)
+                        group(
+                            toggle: $runHomebrew,
+                            title: "Homebrew",
+                            symbol: "mug",
+                            names: plan.homebrew.map(\.appName),
+                            explanation: "Runs “\(run.command)” and shows Homebrew's output. Open apps may be quit."
+                        )
+                    }
+                    if let row = plan.macCleaner {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Label("Mac Cleaner \(row.shortLatestVersion ?? "")", systemImage: "chevron.left.forwardslash.chevron.right")
+                                .font(.headline)
+                            HStack {
+                                Text("Downloaded from GitHub and verified before it replaces this copy. Mac Cleaner restarts afterwards, so it's installed separately.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer()
+                                Button("Update…") {
+                                    dismiss()
+                                    onUpdateMacCleaner()
+                                }
+                            }
+                        }
+                        .card(padding: 12)
+                    }
+                    if !plan.selfUpdating.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Update in the App", systemImage: "arrow.up.forward.app")
+                                .font(.headline)
+                            Text("These apps install updates with their own updater, so Mac Cleaner can't update them for you. Open each one; if it doesn't offer the update, choose “Check for Updates…” in its menu.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            ForEach(plan.selfUpdating) { row in
+                                HStack(spacing: 8) {
+                                    FileIcon(path: row.app.path, size: 18)
+                                    Text(row.name).lineLimit(1)
+                                    Text("\(row.shortInstalledVersion) → \(row.shortLatestVersion ?? "?")")
+                                        .font(.caption.monospacedDigit())
+                                        .foregroundStyle(.secondary)
+                                    Spacer()
+                                    Button("Open") { model.openApp(row) }
+                                        .controlSize(.small)
+                                }
+                            }
+                        }
+                        .card(padding: 12)
+                    }
+                }
+            }
+            .frame(maxHeight: 360)
+
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button(primaryTitle(plan)) {
+                    model.runUpdateAll(openAppStore: openAppStore, runHomebrew: runHomebrew)
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!plan.canRun || (!(openAppStore && !plan.appStore.isEmpty) && !(runHomebrew && !plan.homebrew.isEmpty)))
+            }
+        }
+        .padding(22)
+        .frame(width: 540)
+    }
+
+    private func primaryTitle(_ plan: UpdatesViewModel.UpdateAllPlan) -> String {
+        let count = (openAppStore ? plan.appStore.count : 0) + (runHomebrew ? plan.homebrew.count : 0)
+        return count == 0 ? "Update" : "Update \(count) App\(count == 1 ? "" : "s")"
+    }
+
+    private func group(toggle: Binding<Bool>, title: String, symbol: String, names: [String], explanation: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: toggle) {
+                Label("\(title) · \(names.count) app\(names.count == 1 ? "" : "s")", systemImage: symbol)
+                    .font(.headline)
+            }
+            .toggleStyle(.checkbox)
+            Text(ListFormatter.localizedString(byJoining: names))
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(explanation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        // As wide as the other cards in the sheet, whatever the length of the names.
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .card(padding: 12)
+    }
+}
+
+// MARK: - Homebrew
+
 /// Shows a running or finished `brew upgrade`.
 struct UpdatesHomebrewRunSheet: View {
     @Bindable var run: UpdatesHomebrewRun
@@ -288,12 +474,13 @@ struct UpdatesHomebrewRunSheet: View {
             HStack(spacing: 12) {
                 IconTile(section: .updates, size: 40)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Updating \(run.appName) with Homebrew")
+                    Text("Updating \(run.title) with Homebrew")
                         .font(.title3.weight(.semibold))
-                    Text(run.cask.upgradeCommand)
+                    Text(run.command)
                         .font(.callout.monospaced())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
+                        .lineLimit(2)
                 }
             }
             switch run.state {
@@ -311,7 +498,7 @@ struct UpdatesHomebrewRunSheet: View {
             case .finished(let succeeded, let output):
                 InfoCallout(
                     style: succeeded ? .success : .warning,
-                    message: succeeded ? "\(run.appName) was updated." : "Homebrew couldn't finish the update. Its output is below."
+                    message: succeeded ? "\(run.title) \(run.items.count == 1 ? "was" : "were") updated." : "Homebrew couldn't finish the update. Its output is below."
                 )
                 ScrollView {
                     Text(output)
@@ -325,7 +512,7 @@ struct UpdatesHomebrewRunSheet: View {
             }
             HStack {
                 if case .finished(false, _) = run.state {
-                    Button("Copy Command") { UpdatesPasteboard.copy(run.cask.upgradeCommand) }
+                    Button("Copy Command") { UpdatesPasteboard.copy(run.command) }
                 }
                 Spacer()
                 if run.isRunning {

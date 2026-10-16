@@ -1,6 +1,6 @@
 # Security policy
 
-Mac Cleaner removes files, so safety bugs matter more than any other kind.
+Mac Cleaner removes files, stops processes and protects your Mac from malware, so safety bugs matter more than any other kind.
 
 ## Reporting a vulnerability
 
@@ -14,3 +14,7 @@ Report it privately through [GitHub Security Advisories](https://github.com/Shay
 * Following symbolic links, crossing volumes, or time-of-check/time-of-use races during cleanup
 * Credentials, bookmarks or personal data being modified or exposed
 * Anything that weakens macOS protections (Gatekeeper, SIP, TCC, quarantine)
+* The Virus Chest moving, restoring or deleting something other than the detected item, or letting a quarantined item run
+* Accepting virus definitions or a Mac Cleaner update that isn't genuinely signed (ClamAV's signatures, the release checksum, the Developer ID signature or notarization)
+* Stopping a process that the stop plan should have protected (your shell, terminal, editor, another user's process) or one whose PID was reused
+* A malicious file, archive or database that crashes or hangs the scanning engine (please include a sample only through the private advisory)

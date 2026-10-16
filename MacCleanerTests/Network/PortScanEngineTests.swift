@@ -4,7 +4,7 @@ import Testing
 @testable import MacCleaner
 
 /// End-to-end checks of PortScanEngine against real throwaway processes started (and killed) by the test itself:
-/// `make serve` → `sh -c "while true; do python3 -m http.server …; done"` → python, i.e. a runner whose server
+/// `make serve` → `sh -c "while true; do python3 -c <listener>; done"` → python, i.e. a runner whose server
 /// gets replaced, like nodemon / `node --watch` / uvicorn --reload do on every save.
 extension PortLiveProcessTests {
     @Suite struct PortScanEngineTests {
@@ -173,7 +173,7 @@ extension PortLiveProcessTests {
     }
 }
 
-/// `make` → `sh -c` loop → `python3 -m http.server <port>` in its own process group, in a temporary folder.
+/// `make` → `sh -c` loop → a python3 listener on `<port>` in its own process group, in a temporary folder.
 final class PortThrowawayServerTree {
     let port: UInt16
     let makePID: pid_t
@@ -202,7 +202,7 @@ final class PortThrowawayServerTree {
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
         // The tree's output goes to a log file, so a failure can say why the server didn't start.
         let log = container + "/server-output.log"
-        let makefile = "serve:\n\twhile true; do \(python) -m http.server \(port) --bind 127.0.0.1 >>'\(log)' 2>&1; "
+        let makefile = "serve:\n\twhile true; do \(python) -c '\(pythonListenerCode(port: port))' >>'\(log)' 2>&1; "
             + "sleep \(restartDelay); done\n"
         try makefile.write(to: folder.appendingPathComponent("Makefile"), atomically: true, encoding: .utf8)
         makePID = try Self.spawnInOwnProcessGroup("/usr/bin/make", ["make", "-s", "-C", directory, "serve"], output: log)
@@ -234,7 +234,6 @@ final class PortThrowawayServerTree {
         }
         let output = (try? String(contentsOfFile: container + "/server-output.log", encoding: .utf8)).map { String($0.suffix(800)) } ?? ""
         let processes = PortProcessTable(processes: PortSysProc.allProcesses()).descendants(of: makePID)
-        try cancelIfServerCantBeWatched(port: port, processes: processes)
         throw PortTestError("the throwaway server did not start listening on :\(port)" + (output.isEmpty ? " (no output)" : "; output: " + output)
                             + "; " + portVisibilityReport(port: port, processes: processes))
     }

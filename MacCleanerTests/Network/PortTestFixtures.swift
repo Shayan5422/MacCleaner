@@ -75,20 +75,11 @@ struct PortTestError: Error, CustomStringConvertible {
     init(_ description: String) { self.description = description }
 }
 
-/// Cancels the running test when the server it started is up but this session can't watch it: something
-/// accepts connections on `port`, the kernel's listener list says one of `processes` owns it, yet that
-/// process's descriptors don't show the socket. GitHub's macOS runners hide them for the Python the tests
-/// start (a node server is visible there, and on a Mac in a user session both are), so the tests that
-/// watch servers can't observe anything there. A server that really failed to start still fails the test.
-func cancelIfServerCantBeWatched(port: UInt16, processes: [PortProcessBasic]) throws {
-    guard portAcceptsConnections(port), let listeners = PortSysProc.systemTCPListeners() else { return }
-    let owners = Set(listeners.filter { $0.port == port }.map(\.pid))
-    let hidden = processes.contains { process in
-        owners.contains(process.pid)
-            && PortSysProc.listeningTCPSockets(pid: process.pid)?.contains(where: { $0.port == port }) != true
-    }
-    guard hidden else { return }
-    try Test.cancel("The server listens on :\(port), but this session can't read its process's descriptors, so the test can't watch it")
+/// Python code that listens on 127.0.0.1:`port` until it's killed (for `python3 -c '…'`). Not
+/// `python3 -m http.server`: that looks up the host's name between binding and listening, which on
+/// GitHub's macOS runners took longer than the tests wait (15 s, while a node server was up at once).
+func pythonListenerCode(port: UInt16) -> String {
+    "import socket, time; server = socket.create_server((\"127.0.0.1\", \(port))); time.sleep(86400)"
 }
 
 /// Whether something accepts TCP connections on 127.0.0.1:`port` within `timeout`.

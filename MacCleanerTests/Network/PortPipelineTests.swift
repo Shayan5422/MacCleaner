@@ -497,11 +497,11 @@ final class PortPipelineSandbox: @unchecked Sendable {
         return "; output: " + String(text.suffix(800))
     }
 
-    /// `python3 -m http.server <port>` on 127.0.0.1 with `directory` as its working directory.
+    /// A python3 server listening on 127.0.0.1:`port` with `directory` as its working directory.
     @discardableResult
     func startServer(in directory: String, port: UInt16) throws -> pid_t {
         guard let python = Self.python else { throw PortTestError("python3 is not installed") }
-        let script = "cd \(Self.quoted(directory)) && exec \(python) -m http.server \(port) --bind 127.0.0.1"
+        let script = "cd \(Self.quoted(directory)) && exec \(python) -c '\(pythonListenerCode(port: port))'"
         return try spawn("/bin/sh", ["sh", "-c", script])
     }
 
@@ -510,7 +510,7 @@ final class PortPipelineSandbox: @unchecked Sendable {
     func startServerWithWorker(in directory: String, port: UInt16) throws -> pid_t {
         guard let python = Self.python else { throw PortTestError("python3 is not installed") }
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/make") else { throw PortTestError("make is not installed") }
-        let makefile = "serve:\n\t\(python) -m http.server \(port) --bind 127.0.0.1 >>\(Self.quoted(outputLog)) 2>&1 & "
+        let makefile = "serve:\n\t\(python) -c '\(pythonListenerCode(port: port))' >>\(Self.quoted(outputLog)) 2>&1 & "
             + "\(python) -c 'import time; time.sleep(600)'\n"
         try makefile.write(toFile: directory + "/Makefile", atomically: true, encoding: .utf8)
         return try spawn("/usr/bin/make", ["make", "-s", "-C", directory, "serve"])
@@ -529,7 +529,6 @@ final class PortPipelineSandbox: @unchecked Sendable {
             Thread.sleep(forTimeInterval: 0.05)
         }
         let processes = PortSysProc.allProcesses().filter { groups.contains($0.pgid) }
-        try cancelIfServerCantBeWatched(port: port, processes: processes)
         throw PortTestError("the throwaway server did not start listening on :\(port)" + outputTail()
                             + "; " + portVisibilityReport(port: port, processes: processes))
     }

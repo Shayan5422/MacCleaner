@@ -110,7 +110,7 @@ extension PortLiveProcessTests {
         }
 
         @Test func stopOnlyThisProcessLeavesTheRunner() async throws {
-            // make → sh -c "while true; do python3 -m http.server …; done": a runner that outlives its server.
+            // make → sh -c "while true; do python3 -c <listener>; done": a runner that outlives its server.
             let tree = try PortThrowawayServerTree()
             defer { tree.kill() }
             let server = try tree.waitForServer()

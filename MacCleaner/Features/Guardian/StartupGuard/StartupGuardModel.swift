@@ -537,11 +537,11 @@ final class StartupGuardModel {
         let apps = analysis.apps
         let title: String
         if items.count == 1 {
-            title = "“\(items[0].name)” opened automatically at login"
+            title = "“\(items[0].name)” opened at login"
         } else if apps.count == items.count {
-            title = "\(apps.count) apps opened automatically at login"
+            title = "\(apps.count) apps opened at login"
         } else {
-            title = "\(items.count) apps and programs opened automatically at login"
+            title = "\(items.count) items opened at login"
         }
         let names = items.prefix(4).map(\.name).joined(separator: ", ") + (items.count > 4 ? " and \(items.count - 4) more" : "")
         eventLog.post(ProtectionEvent(date: analysis.analyzedAt, kind: .openedAtLogin, severity: .info, title: title, detail: names, section: .startup))

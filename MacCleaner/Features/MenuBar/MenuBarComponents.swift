@@ -204,11 +204,12 @@ private struct MenuBarEventRow: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(event.severity == .info ? Color.secondary : event.severity.tint)
             } trailing: {
-                Text(DateFormatting.relative(event.date))
-                    .font(.caption2)
+                Text(Self.age(of: event.date))
+                    .font(.caption2.monospacedDigit())
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .fixedSize()
+                    .help(DateFormatting.relative(event.date))
             }
             .padding(.horizontal, 4)
             .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isHovering ? Color.hoverFill : .clear))
@@ -218,6 +219,17 @@ private struct MenuBarEventRow: View {
         .disabled(event.section == nil)
         .onHover { isHovering = $0 }
         .help(event.section.map { "Open \($0.title)" } ?? event.title)
+    }
+
+    /// "now", "5 min", "2 h", "3 d": short enough to leave the title its room.
+    static func age(of date: Date, now: Date = Date()) -> String {
+        let seconds = max(0, now.timeIntervalSince(date))
+        switch seconds {
+        case ..<60: return "now"
+        case ..<3600: return "\(Int(seconds / 60)) min"
+        case ..<86_400: return "\(Int(seconds / 3600)) h"
+        default: return "\(Int(seconds / 86_400)) d"
+        }
     }
 }
 

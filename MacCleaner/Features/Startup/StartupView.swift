@@ -34,7 +34,7 @@ struct StartupView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(maxWidth: 620)
+            .fixedSize()
             .accessibilityLabel("Startup Items sections")
 
             switch model.page {

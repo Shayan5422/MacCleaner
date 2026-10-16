@@ -117,6 +117,7 @@
 		469FD4A66AFFD131F7EE0507 /* PortStopSafety.swift in Sources */ = {isa = PBXBuildFile; fileRef = 625D48F684FBF92157ED96E7 /* PortStopSafety.swift */; };
 		46FC02C2D6BD787B3010A705 /* PortComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5618AEAC8E76313E8684F00E /* PortComponents.swift */; };
 		4704BE41AC66C5521CB885B5 /* SystemJunkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BCB60D122018728E8A14CB5 /* SystemJunkTests.swift */; };
+		4792AD4A2D00C943023BD728 /* SecureDirectoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1632260873C766EC234D39C7 /* SecureDirectoryTests.swift */; };
 		483A856CE857A8B1B75B7914 /* StorageNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 049B0C25FACF7378E580FB3C /* StorageNode.swift */; };
 		48B8316F4E9CE5C93042395C /* PortListenerBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12BFE228F1DB88EEF6E0BA33 /* PortListenerBuilder.swift */; };
 		497344C1F798C629BD4DB616 /* AVTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBD4E46480287B50E83E59A6 /* AVTestSupport.swift */; };
@@ -203,6 +204,7 @@
 		743CFDBF56394BD824B47DDF /* DeveloperEnvironment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80564FFB95F82E4E19D26F5C /* DeveloperEnvironment.swift */; };
 		747674C96633F7A91D3B412B /* UninstallerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77E4EDCC89029FCFE680C0F5 /* UninstallerViewModel.swift */; };
 		7487F43E95B02D4174184A96 /* UpdatesAppcast.swift in Sources */ = {isa = PBXBuildFile; fileRef = F13E4F6BBA02AB5358EE819A /* UpdatesAppcast.swift */; };
+		7501DEB0E62FA3DE399B6314 /* SecureDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC33F7A24B20A9E27EBEE57B /* SecureDirectory.swift */; };
 		759710D0A21C00EE236672AE /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C7BACF3187E0A0F65F65698 /* DashboardView.swift */; };
 		76951CA410367022EA04D9F8 /* CloudStorageScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E571EDF9E1536C1175C04B6 /* CloudStorageScanner.swift */; };
 		76F272C71C4FACEDA45B7B67 /* MenuBarSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B65212835FAA109EE7F7D01 /* MenuBarSupport.swift */; };
@@ -505,6 +507,7 @@
 		153672936942BD69C1FA0F14 /* GuardianStartupCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuardianStartupCollector.swift; sourceTree = "<group>"; };
 		157802C78987DE3B8B4CE43C /* PrivacyModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivacyModels.swift; sourceTree = "<group>"; };
 		157ED6FE286E310451DB5FB6 /* StartupLaunchdPlistParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupLaunchdPlistParserTests.swift; sourceTree = "<group>"; };
+		1632260873C766EC234D39C7 /* SecureDirectoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureDirectoryTests.swift; sourceTree = "<group>"; };
 		16428714ED6CAF1617C430DB /* UpdatesHomebrewTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesHomebrewTests.swift; sourceTree = "<group>"; };
 		1644024D85ED0429A557D3EB /* ConnectionsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionsTab.swift; sourceTree = "<group>"; };
 		173A893D846FC619BB308F9F /* DeveloperHomebrewParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperHomebrewParserTests.swift; sourceTree = "<group>"; };
@@ -774,6 +777,7 @@
 		BAC5CB0A5DDADFD4411D0985 /* AVScanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVScanTests.swift; sourceTree = "<group>"; };
 		BB2FFB74C4781F7104B78822 /* UninstallerComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UninstallerComponents.swift; sourceTree = "<group>"; };
 		BC194E9BB2619C1DFAC685F7 /* AVDownloadOrigin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVDownloadOrigin.swift; sourceTree = "<group>"; };
+		BC33F7A24B20A9E27EBEE57B /* SecureDirectory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureDirectory.swift; sourceTree = "<group>"; };
 		BC52163523FCE956D91F8E7D /* PortProcessKillerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PortProcessKillerTests.swift; sourceTree = "<group>"; };
 		BE880FCD2F228B356F622096 /* PerformanceOptimizeTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceOptimizeTab.swift; sourceTree = "<group>"; };
 		BF43A22A62B0A606780C74D1 /* ClamAVSignatureVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClamAVSignatureVerifier.swift; sourceTree = "<group>"; };
@@ -960,6 +964,7 @@
 				A6F56BF74E82462023A58048 /* BulkDirectoryReader.swift */,
 				659EA3F5B04DC668D1D54019 /* FileSystemScanner.swift */,
 				73EF3C5A94A457190E78C806 /* ParallelDirectoryWalker.swift */,
+				BC33F7A24B20A9E27EBEE57B /* SecureDirectory.swift */,
 			);
 			path = FileSystem;
 			sourceTree = "<group>";
@@ -1552,6 +1557,7 @@
 			children = (
 				60E75714040318923F5D8CF9 /* FileSystemTests.swift */,
 				40B0FEFE6F16A260D05C473B /* SafetyTests.swift */,
+				1632260873C766EC234D39C7 /* SecureDirectoryTests.swift */,
 				FC9548040DE6B334326B3DF4 /* SmokeTests.swift */,
 				B0A8B8B15B03788C780A221F /* SystemServicesTests.swift */,
 				6B2A6EAD0321B677C090F9EF /* TestSupport.swift */,
@@ -2148,6 +2154,7 @@
 				D385439B07CDF482855E0D7C /* PrivacyTestSandbox.swift in Sources */,
 				DE42C578E5A87A7CECEF1CA3 /* ReleaseNotesTests.swift in Sources */,
 				B98CF0FEB2B307281C673436 /* SafetyTests.swift in Sources */,
+				4792AD4A2D00C943023BD728 /* SecureDirectoryTests.swift in Sources */,
 				838847C311AA992558B354DB /* SecurityHeuristicsTests.swift in Sources */,
 				7CD22DDCB555FBB516B3A786 /* SecurityPUARulesTests.swift in Sources */,
 				E25B22B8306DDCCCC9656096 /* SecurityPostureParserTests.swift in Sources */,
@@ -2432,6 +2439,7 @@
 				B210D27C4D9C73DE17BC2CEB /* ScanModels.swift in Sources */,
 				EF7809BD8CBD4A028C3048CE /* ScreenshotAutomation.swift in Sources */,
 				4B9BED77D33E77F530A78F0F /* ScreenshotPlan.swift in Sources */,
+				7501DEB0E62FA3DE399B6314 /* SecureDirectory.swift in Sources */,
 				E78BB5042CD273A2AD5E39E2 /* SecurityCodeTrust.swift in Sources */,
 				B28848C916774FA7AE2EC900 /* SecurityFindingViews.swift in Sources */,
 				11741A7038E5AA0D497AF985 /* SecurityHeuristics.swift in Sources */,

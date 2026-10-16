@@ -52,11 +52,9 @@ enum GuardianStorage {
     }
 
     /// Removes leftovers of an interrupted read (a crash while a history snapshot existed).
+    /// Never follows a symbolic link: a scratch folder replaced by a link is left alone.
     static func clearScratch(_ directory: URL) {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
-        for name in names {
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
-        }
+        SecureDirectory.removeContents(of: directory)
     }
 }
 

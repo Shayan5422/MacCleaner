@@ -260,9 +260,9 @@ enum WebShieldHistoryReader {
     }
 
     static func makeWorkFolder(in scratchDirectory: String) throws -> String {
-        try FileManager.default.createDirectory(atPath: scratchDirectory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let root = PathUtilities.resolvedPath(scratchDirectory) ?? scratchDirectory
-        let folder = root + "/read-" + UUID().uuidString
+        // A real, private folder; a symbolic link in its place is replaced, never followed.
+        try SecureDirectory.ensure(URL(fileURLWithPath: scratchDirectory, isDirectory: true), mode: 0o700)
+        let folder = scratchDirectory + "/read-" + UUID().uuidString
         try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
         return folder
     }

@@ -48,15 +48,15 @@ struct AVPaths: Sendable, Hashable {
     /// Every path the scanners must skip: the Virus Chest and the definitions themselves.
     var rootPath: String { PathUtilities.resolvedPath(root.path) ?? root.path }
 
-    /// Creates the folder layout. The root and the Virus Chest are private to this user (0700).
+    /// Creates the folder layout. The root, the Virus Chest and `tmp` are private to this user (0700).
+    /// A symbolic link in place of any of these folders is replaced by a real folder, never followed.
     func prepare() throws {
-        let manager = FileManager.default
-        for directory in [root, clamav, downloads, engine, intel, quarantine, temporary] {
-            try manager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try SecureDirectory.ensure(root, mode: 0o700)
+        for directory in [clamav, downloads, engine, intel] {
+            try SecureDirectory.ensure(directory, mode: 0o755)
         }
-        chmod(root.path, 0o700)
-        chmod(quarantine.path, 0o700)
-        chmod(temporary.path, 0o700)
+        try SecureDirectory.ensure(quarantine, mode: 0o700)
+        try SecureDirectory.ensure(temporary, mode: 0o700)
     }
 
     /// A fresh, empty folder inside `tmp/` (same volume as everything else, so moves are atomic).
@@ -70,13 +70,7 @@ struct AVPaths: Sendable, Hashable {
 
     /// Removes leftovers of interrupted work (older than an hour).
     func cleanTemporary(olderThan age: TimeInterval = 3600, now: Date = Date()) {
-        let manager = FileManager.default
-        guard let names = try? manager.contentsOfDirectory(atPath: temporary.path) else { return }
-        for name in names {
-            let url = temporary.appendingPathComponent(name)
-            let modified = (try? manager.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date ?? .distantPast
-            if now.timeIntervalSince(modified) > age { try? manager.removeItem(at: url) }
-        }
+        SecureDirectory.removeContents(of: temporary, olderThan: age, now: now)
     }
 
     /// Allocated bytes of a file or folder (bounded walk, for "size on disk").

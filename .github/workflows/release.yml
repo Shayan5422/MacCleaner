@@ -29,8 +29,34 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  existing:
+    name: Look for an existing release
+    runs-on: ubuntu-latest
+    outputs:
+      published: ${{ steps.lookup.outputs.published }}
+    steps:
+      - name: Look for the release
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A release published from a Mac with scripts/release.sh (docs/RELEASING.md) creates its
+          # tag as well; this run then has nothing to add.
+          published=false
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            assets="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null || true)"
+            if [[ "$assets" == *.dmg* ]]; then
+              published=true
+              echo "::notice title=Already published::$GITHUB_REF_NAME already has a signed disk image, so there's nothing to build."
+            fi
+          fi
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
   release:
     name: Build, sign, notarize and publish
+    needs: existing
+    if: needs.existing.outputs.published != 'true'
     runs-on: xcode-27
     timeout-minutes: 60
     env:

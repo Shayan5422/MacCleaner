@@ -98,6 +98,18 @@ The certificate is imported into a temporary keychain that is deleted at the end
 
 The workflow refuses a tag that doesn't match `MARKETING_VERSION` or has no changelog section. You can also start it from **Actions › Release › Run workflow**: without "publish" it only uploads the build as a workflow artifact (ad-hoc signed when the secrets aren't set up), with "publish" it also creates the tag and the release.
 
+### Publishing from your Mac instead
+
+Without the secrets, build with `scripts/release.sh` (above), then create the release as a draft with its files and publish it. Publishing creates the tag; the Release workflow then finds the signed disk image already there and has nothing to do.
+
+```bash
+v=X.Y.Z
+scripts/release-notes.sh "$v" > build/release/notes.md
+gh release create "v$v" build/release/Mac-Cleaner-"$v".{dmg,zip,sha256} --draft --target main \
+  --title "Mac Cleaner $v" --notes-file build/release/notes.md
+gh release edit "v$v" --draft=false
+```
+
 ## Versioning
 
 Bump `MARKETING_VERSION` (and `CURRENT_PROJECT_VERSION`) in `project.yml`, run `xcodegen generate`, add an entry to `CHANGELOG.md`, then tag the release (`git tag v1.0.0`). Pushing the tag publishes the release (see above).

@@ -55,6 +55,14 @@ It's built around two rules: **your data is safer than any amount of free space*
 
 <table>
   <tr>
+    <td><img src="docs/images/ports-dark.png" alt="Ports & Network: every open port by project, with one-click Stop (dark appearance)"></td>
+    <td><img src="docs/images/connections-dark.png" alt="Connections: every app's network connections checked against malware feeds (dark appearance)"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/startup-guard.png" alt="Startup Guard: what opened by itself at your last login, and why"></td>
+    <td><img src="docs/images/updates.png" alt="Updates"></td>
+  </tr>
+  <tr>
     <td><img src="docs/images/smart-scan.png" alt="Smart Scan results"></td>
     <td><img src="docs/images/system-junk.png" alt="System Junk"></td>
   </tr>

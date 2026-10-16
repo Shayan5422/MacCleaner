@@ -63,10 +63,18 @@ struct SecurityView: View {
     }
 }
 
-/// The persistent statement of what this feature is and isn't.
+/// The persistent statement of what this page checks, and where virus scanning is.
 struct SecurityDisclaimer: View {
     var body: some View {
-        InfoCallout(style: .info, message: "Mac Cleaner checks persistence locations, code signatures and known adware rules. It isn't an antivirus — macOS XProtect provides built-in malware protection.")
+        HStack(spacing: 12) {
+            InfoCallout(style: .info, message: "This page checks macOS protections, what starts automatically, app signatures and known adware rules. To scan files for viruses and other malware, use Antivirus.")
+            Button {
+                AppPresence.shared.openSection(.antivirus)
+            } label: {
+                Label("Open Antivirus", systemImage: AppSection.antivirus.symbolName)
+            }
+            .help("Scan files for viruses and malware")
+        }
     }
 }
 
@@ -105,7 +113,7 @@ private struct SecurityResultsView: View {
     let report: SecurityReport
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
+        TileRow {
             SecuritySeverityTile(severity: .threat, count: model.count(.threat))
             SecuritySeverityTile(severity: .suspicious, count: model.count(.suspicious))
             SecuritySeverityTile(severity: .recommendation, count: model.count(.recommendation))
@@ -149,7 +157,7 @@ private struct SecuritySeverityTile: View {
     var body: some View {
         StatTile(title: SecurityStyle.groupTitle(severity), value: NumberFormatting.count(count),
                  caption: SecurityStyle.groupCaption(severity), symbol: severity.symbolName,
-                 tint: count == 0 ? .green : SecurityStyle.color(severity))
+                 tint: count == 0 ? .green : SecurityStyle.color(severity), fillsHeight: true)
     }
 }
 

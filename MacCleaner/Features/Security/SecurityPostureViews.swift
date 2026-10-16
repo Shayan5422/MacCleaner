@@ -17,7 +17,10 @@ struct SecurityPostureSection: View {
         } content: {
             if let posture = model.posture {
                 SecurityPostureOverview(posture: posture)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 10, alignment: .top)], spacing: 10) {
+                // Five protections: one row when they fit, otherwise 3 + 2 that fill the width.
+                // 210 points keeps a title, its status badge and the two buttons of a protection
+                // that's off ("Open Settings", "How to Turn On") readable.
+                BalancedGrid(minimumItemWidth: 210, spacing: 10) {
                     ForEach(posture.protections) { protection in
                         SecurityProtectionTile(protection: protection, model: model)
                     }
@@ -140,7 +143,7 @@ private struct SecurityProtectionTile: View {
             }
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: Metrics.tileRadius, style: .continuous).fill(color.opacity(0.06)))
         .overlay(RoundedRectangle(cornerRadius: Metrics.tileRadius, style: .continuous).strokeBorder(color.opacity(0.16)))
         .accessibilityElement(children: .contain)

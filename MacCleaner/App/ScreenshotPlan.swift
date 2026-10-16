@@ -1,12 +1,17 @@
 #if DEBUG
-import Foundation
+import AppKit
+import SwiftUI
 
-/// The pages captured for the README, each prepared with a real scan of this Mac.
+/// The pages captured for the README and design reviews, each prepared with a real
+/// scan of this Mac. Run with `--pretend-version 0.9.0` to capture the update-available
+/// states with the real latest release from GitHub.
 @MainActor
 enum ScreenshotPlan {
     static var steps: [ScreenshotAutomation.Step] {
         [
-            .init(name: "dashboard", section: .dashboard, settle: .seconds(4)),
+            .init(name: "dashboard", section: .dashboard, prepare: { _ in
+                await checkMacCleanerUpdates()
+            }, settle: .seconds(4)),
             .init(name: "smart-scan", section: .smartScan, prepare: { environment in
                 environment.smartScan.start()
                 await ScreenshotAutomation.wait(timeout: .seconds(300)) { environment.smartScan.phase == .results }
@@ -23,6 +28,15 @@ enum ScreenshotPlan {
             .init(name: "uninstaller", section: .uninstaller, prepare: { environment in
                 environment.uninstaller.loadIfNeeded()
                 await ScreenshotAutomation.wait { !environment.uninstaller.isLoading }
+            }, apply: { environment in
+                environment.uninstaller.selection = []
+            }, settle: .seconds(3)),
+            .init(name: "uninstaller-detail", section: .uninstaller, apply: { environment in
+                let app = environment.uninstaller.visibleApps.first { $0.canUninstall && $0.usage != nil }
+                    ?? environment.uninstaller.visibleApps.first
+                if let app { environment.uninstaller.selection = [app.id] }
+            }, reset: { environment in
+                environment.uninstaller.selection = []
             }, settle: .seconds(3)),
             .init(name: "duplicates", section: .duplicates, prepare: { environment in
                 environment.duplicates.startScan()
@@ -50,11 +64,84 @@ enum ScreenshotPlan {
             .init(name: "updates", section: .updates, prepare: { environment in
                 environment.updates.loadIfNeeded()
                 await ScreenshotAutomation.wait { environment.updates.hasLoaded }
-                environment.updates.checkForUpdates()
-                await ScreenshotAutomation.wait(timeout: .seconds(240)) { !environment.updates.isChecking }
+                if !CommandLine.arguments.contains("--screenshot-reuse-update-results") || environment.updates.lastCheckDate == nil {
+                    environment.updates.checkForUpdates()
+                    await ScreenshotAutomation.wait(timeout: .seconds(240)) { !environment.updates.isChecking }
+                }
+                // Let sizes of the apps with updates arrive.
+                await ScreenshotAutomation.wait(timeout: .seconds(60)) {
+                    environment.updates.sections.first?.rows.allSatisfy { $0.app.usage != nil } ?? true
+                }
+            }, apply: { environment in
+                resetUpdates(environment.updates)
             }, settle: .seconds(3)),
+            .init(name: "updates-notes", section: .updates, apply: { environment in
+                let model = environment.updates
+                resetUpdates(model)
+                let rows = model.sections.first { $0.group == .updates }?.rows ?? []
+                if let row = rows.first(where: { model.hasReleaseNotes($0) && !$0.isMacCleaner && $0.hasEmbeddedReleaseNotes })
+                    ?? rows.first(where: { model.hasReleaseNotes($0) }) {
+                    model.toggleReleaseNotes(row)
+                    await ScreenshotAutomation.wait(timeout: .seconds(20)) {
+                        if case .loading? = model.notes[row.id] { return false }
+                        return true
+                    }
+                }
+            }, reset: { environment in
+                resetUpdates(environment.updates)
+            }, settle: .seconds(2)),
+            .init(name: "updates-detail", section: .updates, apply: { environment in
+                let model = environment.updates
+                resetUpdates(model)
+                let rows = model.sections.first { $0.group == .updates }?.rows ?? []
+                if let row = rows.first(where: { !$0.isMacCleaner }) ?? rows.first ?? model.allRows.first {
+                    model.inspectedRowID = row.id
+                }
+            }, reset: { environment in
+                resetUpdates(environment.updates)
+            }, settle: .seconds(3)),
+            .init(name: "updates-all", section: .updates, apply: { environment in
+                resetUpdates(environment.updates)
+                environment.updates.isShowingUpdateAll = !environment.updates.updateAllPlan.isEmpty
+            }, reset: { environment in
+                environment.updates.isShowingUpdateAll = false
+            }, settle: .seconds(2)),
             .init(name: "history", section: .history, settle: .seconds(2)),
+            .init(name: "about", section: .dashboard, target: .window(title: "About Mac Cleaner"), apply: { _ in
+                ScreenshotAutomation.openWindow?(id: AppWindowID.about)
+            }, reset: { _ in
+                ScreenshotAutomation.closeWindow(titled: "About Mac Cleaner")
+            }, settle: .seconds(2)),
+            .init(name: "app-update", section: .dashboard, target: .window(title: "Mac Cleaner Update"), prepare: { _ in
+                await checkMacCleanerUpdates()
+            }, apply: { _ in
+                ScreenshotAutomation.openWindow?(id: AppWindowID.update)
+            }, reset: { _ in
+                ScreenshotAutomation.closeWindow(titled: "Mac Cleaner Update")
+            }, settle: .seconds(2)),
+            .init(name: "settings", section: .dashboard, target: .settings, apply: { _ in
+                ScreenshotAutomation.openSettings?()
+            }, reset: { _ in
+                ScreenshotAutomation.closeSettings()
+            }, settle: .seconds(2)),
+            .init(name: "menubar", section: .dashboard, target: .menuBarHub, settle: .seconds(3)),
+            .init(name: "onboarding", section: .dashboard, target: .onboarding, settle: .seconds(1)),
         ]
+    }
+
+    /// The Updates page's default state: list, no details panel, no notes, no sheet.
+    private static func resetUpdates(_ model: UpdatesViewModel) {
+        model.inspectedRowID = nil
+        model.isShowingUpdateAll = false
+        model.filter = .all
+        for row in model.allRows where model.isShowingNotes(row) { model.toggleReleaseNotes(row) }
+    }
+
+    /// One real request to GitHub (with `--pretend-version`, the latest release shows as an update).
+    private static func checkMacCleanerUpdates() async {
+        let updates = AppUpdateController.shared
+        guard updates.lastCheckDate == nil || updates.isSimulated else { return }
+        await updates.performCheck(manual: false)
     }
 }
 

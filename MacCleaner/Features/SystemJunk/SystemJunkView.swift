@@ -106,9 +106,12 @@ struct SystemJunkView: View {
                 .background(Color.secondary.opacity(0.14), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text("In the Trash").font(.caption).foregroundStyle(.secondary)
-                Text(model.trashSize.map { ByteFormatting.string($0) } ?? "—")
+                Text(model.trashSize.map { ByteFormatting.string($0) } ?? "Not measured")
                     .font(.system(.title3, design: .rounded).weight(.semibold))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .help(model.trashSize == nil ? "Mac Cleaner needs Full Disk Access to measure the Trash." : "")
                 Button("Open Trash") { FinderActions.openTrash() }
                     .buttonStyle(.link)
                     .font(.caption2)

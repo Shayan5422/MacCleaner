@@ -74,27 +74,30 @@ struct SimilarPhotosResultsPage: View {
     }
 
     private var summary: some View {
-        HStack(spacing: 12) {
+        TileRow {
             StatTile(
                 title: "Groups",
                 value: NumberFormatting.count(model.similarGroups.count),
                 caption: "Photos that look alike",
                 symbol: "square.stack.3d.down.right",
-                tint: tint
+                tint: tint,
+                fillsHeight: true
             )
             StatTile(
                 title: "Photos in groups",
                 value: NumberFormatting.count(model.similarPhotoCount),
                 caption: "\(NumberFormatting.count(model.similarResult?.imagesAnalyzed ?? 0)) photos analyzed",
                 symbol: "photo.on.rectangle",
-                tint: .blue
+                tint: .blue,
+                fillsHeight: true
             )
             StatTile(
                 title: "Marked for Trash",
                 value: NumberFormatting.count(model.similarMarks.count),
                 caption: model.similarMarks.isEmpty ? "Choose photos in each group" : "Frees about \(ByteFormatting.string(model.similarMarkedBytes))",
                 symbol: "trash",
-                tint: .orange
+                tint: .orange,
+                fillsHeight: true
             )
         }
     }

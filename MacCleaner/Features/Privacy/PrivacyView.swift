@@ -137,7 +137,7 @@ struct PrivacyView: View {
                 message: "Mac Cleaner didn’t find data from a supported browser in your Library folder."
             )
         } else {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 12)], alignment: .leading, spacing: 12) {
+            BalancedGrid(minimumItemWidth: 250, spacing: 12) {
                 ForEach(model.visibleBrowsers) { report in
                     PrivacyBrowserCard(
                         report: report,

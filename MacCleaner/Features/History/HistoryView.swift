@@ -81,13 +81,13 @@ struct HistoryView: View {
                     .disabled(model.entries.isEmpty)
             }
 
-            HStack(spacing: 12) {
+            TileRow {
                 StatTile(title: "Total cleaned", value: ByteFormatting.string(model.totalCleaned), caption: "All recorded cleanups",
-                         symbol: "sparkles", tint: AppSection.history.tint)
-                StatTile(title: "Cleanups", value: NumberFormatting.count(model.entries.filter { !$0.dryRun }.count), caption: nil,
-                         symbol: "list.bullet", tint: .blue)
+                         symbol: "sparkles", tint: AppSection.history.tint, fillsHeight: true)
+                StatTile(title: "Cleanups", value: NumberFormatting.count(model.entries.filter { !$0.dryRun }.count), caption: cleanupsCaption,
+                         symbol: "list.bullet", tint: .blue, fillsHeight: true)
                 StatTile(title: "Restorable items", value: NumberFormatting.count(model.entries.reduce(0) { $0 + $1.restorableCount }),
-                         caption: "Still in the Trash", symbol: "arrow.uturn.backward", tint: .green)
+                         caption: "Still in the Trash", symbol: "arrow.uturn.backward", tint: .green, fillsHeight: true)
             }
 
             if let message = model.message {
@@ -200,6 +200,14 @@ struct HistoryView: View {
             }
             .card()
         }
+    }
+
+    private var cleanupsCaption: String {
+        let dryRuns = model.entries.filter(\.dryRun).count
+        if let last = model.entries.first(where: { !$0.dryRun }) {
+            return "Last \(DateFormatting.relative(last.date))"
+        }
+        return dryRuns > 0 ? "\(dryRuns) dry run\(dryRuns == 1 ? "" : "s"), nothing removed" : "Nothing cleaned yet"
     }
 
     private func status(of item: CleanupHistoryEntry.Item, entry: CleanupHistoryEntry) -> String {

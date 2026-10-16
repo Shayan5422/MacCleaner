@@ -6,7 +6,7 @@ struct SmartScanView: View {
     var body: some View {
         VStack(spacing: 0) {
             PageScroll {
-                PageHeader(section: .smartScan, subtitle: "One scan across junk, apps, storage, duplicates, startup items, security, privacy and developer caches.") {
+                PageHeader(section: .smartScan, subtitle: subtitle) {
                     if model.phase == .results {
                         Button {
                             model.start()
@@ -52,6 +52,14 @@ struct SmartScanView: View {
         }
         .searchable(text: $model.searchText, placement: .toolbar, prompt: "Filter results")
         .cleanupFlow(model.cleanupFlow, services: model.services)
+    }
+
+    /// Names the areas this Mac's Smart Scan covers.
+    private var subtitle: String {
+        let hasVirusScan = model.areas.contains { $0.area == .malware && $0.status != .unavailable }
+        return hasVirusScan
+            ? "One scan across junk, apps, storage, duplicates, startup items, security, viruses, privacy and developer caches."
+            : "One scan across junk, apps, storage, duplicates, startup items, security, privacy and developer caches."
     }
 
     private var runningMessage: String {
@@ -150,7 +158,7 @@ struct SmartScanView: View {
     // MARK: - Areas
 
     private func areaGrid(interactive: Bool) -> some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 12)], spacing: 12) {
+        BalancedGrid(minimumItemWidth: 200, spacing: 12) {
             ForEach(model.areas.filter { $0.status != .unavailable }) { state in
                 SmartScanAreaCard(state: state, value: value(for: state.area), tone: tone(for: state.area), isFocused: model.focusedArea == state.area)
                     .onTapGesture {
@@ -259,7 +267,7 @@ private struct SmartScanAreaCard: View {
                 ProgressView(value: state.progress).tint(state.area.tint)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(14)
         .background(RoundedRectangle(cornerRadius: Metrics.cardRadius, style: .continuous).fill(Color.cardBackground))
         .overlay(

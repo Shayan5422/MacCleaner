@@ -67,7 +67,8 @@ final class SettingsManager {
         includeHiddenFiles = snapshot.scan.includeHiddenFiles
         exclusions = snapshot.scan.exclusions
         monitorRefreshInterval = defaults.object(forKey: Key.monitorRefreshInterval) as? Double ?? 2
-        showMenuBarExtra = defaults.bool(forKey: Key.showMenuBarExtra)
+        // On by default: closing the window keeps Mac Cleaner in the menu bar. A saved `false` is kept.
+        showMenuBarExtra = defaults.object(forKey: Key.showMenuBarExtra) as? Bool ?? true
         performanceAlertsEnabled = defaults.bool(forKey: Key.performanceAlertsEnabled)
         cpuAlertThreshold = defaults.object(forKey: Key.cpuAlertThreshold) as? Double ?? 0.9
         memoryPressureAlerts = defaults.object(forKey: Key.memoryPressureAlerts) as? Bool ?? true

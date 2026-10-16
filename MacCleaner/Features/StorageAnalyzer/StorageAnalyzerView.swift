@@ -340,33 +340,33 @@ struct StorageStatTiles: View {
 
     var body: some View {
         let stats = tree.statistics
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 150), spacing: 12, alignment: .top), count: 4), spacing: 12) {
+        TileRow(minimumTileWidth: 200) {
             StatTile(
                 title: "Scanned", value: ByteFormatting.string(tree.root.size),
                 caption: "\(NumberFormatting.count(stats.fileCount)) files in \(NumberFormatting.count(stats.directoryCount)) folders",
-                symbol: "internaldrive", tint: AppSection.storage.tint
+                symbol: "internaldrive", tint: AppSection.storage.tint, fillsHeight: true
             )
             StatTile(
                 title: "Large Files", value: NumberFormatting.count(model.largestRows.count),
                 caption: "\(model.largeFileThresholdDescription) or more · \(ByteFormatting.string(model.largestRows.reduce(0) { $0 + $1.size }))",
-                symbol: "doc.richtext", tint: StorageCategory.videos.color
+                symbol: "doc.richtext", tint: StorageCategory.videos.color, fillsHeight: true
             )
             StatTile(
                 title: "Old Files", value: NumberFormatting.count(model.oldRows.count),
                 caption: "Unused for \(model.services.settings.oldFileAgeDays) days · \(ByteFormatting.string(model.oldRows.reduce(0) { $0 + $1.size }))",
-                symbol: "clock", tint: StorageCategory.archives.color
+                symbol: "clock", tint: StorageCategory.archives.color, fillsHeight: true
             )
             if stats.cloudOnlyFileCount > 0 {
                 StatTile(
                     title: "In the Cloud Only", value: NumberFormatting.count(stats.cloudOnlyFileCount),
                     caption: "\(ByteFormatting.string(stats.cloudOnlyLogicalBytes)) not stored on this Mac",
-                    symbol: "icloud", tint: AppSection.cloud.tint
+                    symbol: "icloud", tint: AppSection.cloud.tint, fillsHeight: true
                 )
             } else {
                 StatTile(
                     title: "Scan Time", value: DateFormatting.duration(max(1, tree.duration)),
                     caption: "\(NumberFormatting.count(stats.packageCount)) apps and packages measured whole",
-                    symbol: "timer", tint: .secondary
+                    symbol: "timer", tint: .secondary, fillsHeight: true
                 )
             }
         }

@@ -81,6 +81,8 @@ enum AVProgramEncoder {
         var minLength: Int
         /// Rarity of the exact bytes at the very start of the pattern (for anchored patterns without a prefilter anchor).
         var leadingExactScore: Int
+        /// Those exact bytes (up to 8).
+        var leadingExact: [UInt8] = []
         /// Without a 4-byte anchor: the rarest literal element of at least 2 bytes, searched for
         /// directly (memmem) by the scanner instead of trying every position.
         var shortAnchorElement: Int?
@@ -115,7 +117,10 @@ enum AVProgramEncoder {
                 minLength += run.count
                 var index = run.startIndex
                 while index < run.endIndex {
-                    let first = kind(run[index])
+                    var first = kind(run[index])
+                    // A short exact stretch right before masked bytes joins them, so a 4-byte
+                    // anchor can include it ("e8 0? 00 00" instead of the much more common "0? 00 00 00").
+                    if first == .literal, shortLiteralJoinsMasked(run, index) { first = .masked }
                     var end = index + 1
                     while end < run.endIndex, end - index < 0xFFFF {
                         let next = kind(run[end])
@@ -202,6 +207,7 @@ enum AVProgramEncoder {
         }
 
         var leadingScore = 0
+        var leadingExact = [UInt8]()
         if case .bytes(let run)? = pattern.elements.first {
             var previous: UInt8?
             for byte in run.prefix(8) {
@@ -209,6 +215,7 @@ enum AVProgramEncoder {
                 let s = Int(AVByteRarity.score[Int(byte.value)])
                 leadingScore += previous == byte.value ? s / 2 : s
                 previous = byte.value
+                leadingExact.append(byte.value)
             }
         }
         var shortAnchor: Int?
@@ -220,7 +227,19 @@ enum AVProgramEncoder {
                 if score > bestScore { bestScore = score; shortAnchor = index }
             }
         }
-        return Encoded(program: writer.bytes, anchor: best, minLength: minLength, leadingExactScore: leadingScore, shortAnchorElement: shortAnchor)
+        return Encoded(program: writer.bytes, anchor: best, minLength: minLength, leadingExactScore: leadingScore, leadingExact: leadingExact,
+                       shortAnchorElement: shortAnchor)
+    }
+
+    /// An exact stretch of 1–3 bytes at `start` followed by a masked byte, where together they
+    /// make a run of at least 4 bytes.
+    private static func shortLiteralJoinsMasked(_ run: [AVMaskedByte], _ start: Int) -> Bool {
+        var index = start
+        while index < run.count, run[index].mask == 0xFF, index - start < 4 { index += 1 }
+        guard index - start < 4, index < run.count, kind(run[index]) == .masked else { return false }
+        var end = index
+        while end < run.count, end - start < 4, kind(run[end]) != .any { end += 1 }
+        return end - start >= 4
     }
 
     /// Masked runs absorb short exact stretches; a long one (≥ 6 bytes) gets its own LIT element
@@ -320,6 +339,131 @@ enum AVProgramEncoder {
             values = values.flatMap { prefix in options.map { prefix | UInt32($0) << (8 * UInt32(k)) } }
         }
         return AVAnchorChoice(element: element, delta: best.delta, variants: values, score: best.score, hitRate: exp2(best.cost))
+    }
+}
+
+// MARK: Pre-verification data
+
+/// Two bytes of a pattern at fixed distances from its prefilter anchor, compared before any
+/// other work when the anchor is hit.
+///
+/// Many signatures can only be anchored on content that is everywhere in some files (zero runs
+/// and padding in Windows executables, a shared word in scripts); their real distinguishing
+/// bytes sit a few bytes away. Comparing two of those first rejects nearly every such hit with
+/// two loads instead of a full match attempt. Packed in a `UInt64` as
+/// `(i16 distance, u8 value, u8 mask) × 2`, distance relative to the anchor's first byte;
+/// mask 0 means no check.
+enum AVQuickCheck {
+    static let none: UInt64 = 0
+    /// Bytes further away than this aren't used (they'd rarely be in the cache line anyway).
+    static let maxDistance = 4096
+
+    /// Builds the checks for a program and its anchor: the two rarest exact (or masked) bytes
+    /// reachable from the anchor through fixed-length elements only.
+    static func make(program: [UInt8], anchor: AVAnchorChoice) -> UInt64 {
+        make(program: program, element: anchor.element, delta: anchor.delta, covered: 4)
+    }
+
+    /// The same for an anchor of `covered` bytes at `delta` inside element `element`.
+    static func make(program: [UInt8], element anchorElement: Int, delta anchorDelta: Int, covered: Int) -> UInt64 {
+        program.withUnsafeBytes { raw -> UInt64 in
+            guard let view = AVProgramView(AVByteView(raw)), anchorElement >= 0, anchorElement < view.elementCount else { return none }
+            var candidates = [(distance: Int, value: UInt8, mask: UInt8, score: Double)]()
+
+            func consider(_ distance: Int, _ value: UInt8, _ mask: UInt8) {
+                guard mask != 0, distance < 0 || distance >= covered, abs(distance) <= maxDistance else { return }
+                candidates.append((distance, value & mask, mask, rarity(value: value & mask, mask: mask)))
+            }
+            /// Visits the bytes of element `index` placed at `start`; returns its length, or nil
+            /// when it has no fixed length (nothing beyond it is at a fixed distance).
+            func visit(_ index: Int, start: Int, backward: Bool) -> Int? {
+                guard let offset = view.elementOffset(index), let op = view.bytes.u8(offset).flatMap(AVProgramOp.init(rawValue:)) else { return nil }
+                switch op {
+                case .literal:
+                    guard let length = view.bytes.u16le(offset + 1).map(Int.init) else { return nil }
+                    let first = backward ? start - length : start
+                    for k in 0..<length { if let value = view.bytes.u8(offset + 3 + k) { consider(first + k, value, 0xFF) } }
+                    return length
+                case .masked:
+                    guard let length = view.bytes.u16le(offset + 1).map(Int.init) else { return nil }
+                    let first = backward ? start - length : start
+                    for k in 0..<length {
+                        if let mask = view.bytes.u8(offset + 3 + k), let value = view.bytes.u8(offset + 3 + length + k) { consider(first + k, value, mask) }
+                    }
+                    return length
+                case .any:
+                    return view.bytes.u32le(offset + 1).map(Int.init)
+                case .set:
+                    return 1
+                case .alternatives:
+                    guard let low = view.bytes.u16le(offset + 4), let high = view.bytes.u16le(offset + 6), low == high else { return nil }
+                    return Int(low)
+                case .gap:
+                    guard let low = view.bytes.u32le(offset + 1), let high = view.bytes.u32le(offset + 5), low == high else { return nil }
+                    return Int(low)
+                case .special:
+                    // (B) and (W) consume one byte inside a pattern; (L) one or two.
+                    return view.bytes.u8(offset + 1) == AVSpecialClass.lineMarker.rawValue ? nil : 1
+                }
+            }
+
+            // The anchor element itself starts `delta` bytes before the anchor.
+            var position = -anchorDelta
+            for index in anchorElement..<view.elementCount {
+                guard position <= maxDistance, let length = visit(index, start: position, backward: false) else { break }
+                position += length
+            }
+            position = -anchorDelta
+            var index = anchorElement - 1
+            while index >= 0, position >= -maxDistance, let length = visit(index, start: position, backward: true) {
+                position -= length
+                index -= 1
+            }
+
+            let chosen = candidates.sorted { $0.score != $1.score ? $0.score > $1.score : abs($0.distance) < abs($1.distance) }.prefix(2)
+            var packed: UInt64 = 0
+            for (slot, check) in chosen.enumerated() {
+                let field = UInt64(UInt16(bitPattern: Int16(check.distance))) | UInt64(check.value) << 16 | UInt64(check.mask) << 24
+                packed |= field << (32 * UInt64(slot))
+            }
+            return packed
+        }
+    }
+
+    /// Rarity (higher is rarer, in the units of `AVByteRarity`) of a byte matching `value` under `mask`.
+    private static func rarity(value: UInt8, mask: UInt8) -> Double {
+        if mask == 0xFF { return Double(AVByteRarity.score[Int(value)]) }
+        var probability = 0.0
+        for byte in 0...255 where UInt8(byte) & mask == value {
+            probability += exp2(-Double(AVByteRarity.score[byte]) / 8)
+        }
+        return probability > 0 ? -8 * log2(min(1, probability)) : 0
+    }
+
+    /// Do the checks hold for an anchor hit at `position`? Bytes outside the buffer fail (the
+    /// pattern can't match there).
+    @inline(__always)
+    static func passes(_ packed: UInt64, base: UnsafeRawPointer, count: Int, at position: Int) -> Bool {
+        let firstMask = UInt8(truncatingIfNeeded: packed >> 24)
+        guard firstMask != 0 else { return true }
+        let first = position &+ Int(Int16(truncatingIfNeeded: packed))
+        guard first >= 0, first < count,
+              base.load(fromByteOffset: first, as: UInt8.self) & firstMask == UInt8(truncatingIfNeeded: packed >> 16) else { return false }
+        let secondMask = UInt8(truncatingIfNeeded: packed >> 56)
+        guard secondMask != 0 else { return true }
+        let second = position &+ Int(Int16(truncatingIfNeeded: packed >> 32))
+        return second >= 0 && second < count
+            && base.load(fromByteOffset: second, as: UInt8.self) & secondMask == UInt8(truncatingIfNeeded: packed >> 48)
+    }
+
+    /// Shortest and longest distance from a pattern's start to the start of element `index`,
+    /// clamped to 16 bits for storage (`0xFFFF` as the maximum means unbounded or larger).
+    static func prefixBounds(program: [UInt8], before index: Int) -> (min: UInt16, max: UInt16) {
+        program.withUnsafeBytes { raw -> (min: UInt16, max: UInt16) in
+            guard let view = AVProgramView(AVByteView(raw)),
+                  let (low, high) = AVPatternMatcher(.empty).prefixLengthBounds(view, before: index) else { return (0, 0xFFFF) }
+            return (UInt16(min(low, 0xFFFE)), high >= 0xFFFF ? 0xFFFF : UInt16(high))
+        }
     }
 }
 

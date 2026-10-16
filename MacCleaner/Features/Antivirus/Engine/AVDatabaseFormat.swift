@@ -12,9 +12,27 @@ import Foundation
 /// damaged file can make a lookup fail but can't make the engine read outside the mapping.
 enum AVDatabaseFormat {
     static let magic: [UInt8] = Array("MCAVDB".utf8) + [0, 1]
-    static let version: UInt32 = 1
+    /// On-disk layout version. **Bump it with every change to what the writer stores or how the
+    /// reader interprets it** (sections, record layouts, flags, metadata meaning, program
+    /// encoding): `AVMappedDatabase` refuses any other version with
+    /// `AVEngineError.invalidDatabase(versionMismatchMessage(found:))` before reading past the
+    /// header, so an older compiled file is recompiled instead of misread.
+    ///
+    /// History: 1 = development layouts (the layout changed several times while still marked 1);
+    /// 2 = the layout of the first integrated engine (deferred `D…`/`V…` tables, weak
+    /// short-anchor `W…` lists, Mach-O wildcard hash flags, load-balanced anchors);
+    /// 3 = `AVQuickCheck` bytes after each prefilter table's candidates, the anchor element's
+    /// prefix bounds in the last 4 bytes of each pattern record, 2-byte-keyed `S…` tables for
+    /// floating patterns without a 4-byte anchor (no longer in the `W…` lists), and the
+    /// required container in bytes 26–27 of each signature record.
+    static let version: UInt32 = 3
     static let headerSize = 64
     static let directoryEntrySize = 24
+
+    /// The `invalidDatabase` detail for a compiled file of another layout version.
+    static func versionMismatchMessage(found: UInt32) -> String {
+        "the compiled database uses format \(found), but this version of the app reads format \(version); it needs to be compiled again."
+    }
     static let fileName = "engine.mcavdb"
 
     // Section tags.
@@ -25,6 +43,8 @@ enum AVDatabaseFormat {
     static func weak(_ target: Int) -> String { String(format: "W%03d", target) }
     static func deferredPrefilter(_ target: Int) -> String { String(format: "D%03d", target) }
     static func deferredList(_ target: Int) -> String { String(format: "V%03d", target) }
+    /// Prefilter keyed by 2-byte values, for floating patterns whose longest exact run is 2–3 bytes.
+    static func shortPrefilter(_ target: Int) -> String { String(format: "S%03d", target) }
     static let fileMD5 = "HM05", fileSHA1 = "HS01", fileSHA256 = "HS25"
     static let fileMD5Sizes = "ZM05", fileSHA1Sizes = "ZS01", fileSHA256Sizes = "ZS25"
     static let sectionMD5 = "XM05", sectionSHA1 = "XS01", sectionSHA256 = "XS25"
@@ -32,8 +52,15 @@ enum AVDatabaseFormat {
     static let hashList = "LS25"
     static let allowMD5 = "FM05", allowSHA1 = "FS01", allowSHA256 = "FS25"
 
+    /// u32 name, u16 flags, u8 target, u8 subsignature count, u32/u32 expression offset/length,
+    /// u32 first subsignature, u32 constraint record (0xFFFFFFFF: none), u8 source, u8 kind,
+    /// u8 required container (`AVContainerCode`, 0: none), u8 other constraints (1: yes), 4 reserved.
     static let signatureRecordSize = 32
     static let subsigRecordSize = 12
+    /// u32 signature, u32 program offset, u32 program length, u16 anchor element, u16 anchor
+    /// delta, u8 subsignature (0xFF: body signature), u8 flags, u8 offset kind, u8 left
+    /// assertion, i32 offset value, u32 max shift, u16 section, u8 right assertion, u8 reserved,
+    /// u32 minimum length, u16 min / u16 max length before the anchor element (0xFFFF: unbounded).
     static let patternRecordSize = 40
     static let constraintRecordSize = 64
     static let hashListRecordSize = 36
@@ -153,6 +180,8 @@ final class AVMappedDatabase: @unchecked Sendable {
     let nameOffsets: AVByteView
     let prefilters: [AVPrefilterTable?]
     let deferredPrefilters: [AVPrefilterTable?]
+    /// 2-byte-keyed tables for floating patterns without a 4-byte anchor.
+    let shortPrefilters: [AVPrefilterTable?]
     let anchoredLists: [AVByteView]
     let weakLists: [AVByteView]
     let deferredLists: [AVByteView]
@@ -188,8 +217,12 @@ final class AVMappedDatabase: @unchecked Sendable {
             guard view.matches(AVDatabaseFormat.magic, at: 0) else {
                 throw AVEngineError.invalidDatabase("the compiled database has an unknown format.")
             }
-            guard view.u32le(8) == AVDatabaseFormat.version else {
-                throw AVEngineError.invalidDatabase("the compiled database was built by a different version of the app.")
+            // Checked before anything else is interpreted: another layout is never misread.
+            guard let fileVersion = view.u32le(8) else {
+                throw AVEngineError.invalidDatabase("the compiled database is truncated.")
+            }
+            guard fileVersion == AVDatabaseFormat.version else {
+                throw AVEngineError.invalidDatabase(AVDatabaseFormat.versionMismatchMessage(found: fileVersion))
             }
             guard let sectionCount = view.u32le(12).map(Int.init), sectionCount < 1024,
                   let declaredLength = view.u64le(16), declaredLength == UInt64(size) else {
@@ -228,6 +261,7 @@ final class AVMappedDatabase: @unchecked Sendable {
         subsigCount = subsigTable.count / AVDatabaseFormat.subsigRecordSize
         prefilters = (0..<AVDatabaseFormat.targetCount).map { AVPrefilterTable(parsed[AVDatabaseFormat.prefilter($0)]) }
         deferredPrefilters = (0..<AVDatabaseFormat.targetCount).map { AVPrefilterTable(parsed[AVDatabaseFormat.deferredPrefilter($0)]) }
+        shortPrefilters = (0..<AVDatabaseFormat.targetCount).map { AVPrefilterTable(parsed[AVDatabaseFormat.shortPrefilter($0)]) }
         anchoredLists = (0..<AVDatabaseFormat.targetCount).map { section(AVDatabaseFormat.anchored($0)) }
         weakLists = (0..<AVDatabaseFormat.targetCount).map { section(AVDatabaseFormat.weak($0)) }
         deferredLists = (0..<AVDatabaseFormat.targetCount).map { section(AVDatabaseFormat.deferredList($0)) }
@@ -272,6 +306,15 @@ final class AVMappedDatabase: @unchecked Sendable {
         return Signature(nameIndex: Int(nameIndex), flags: AVSignatureFlags(rawValue: flags), target: Int(target),
                          subsigCount: Int(subsigCount), expression: expression, firstSubsig: Int(firstSubsig),
                          constraintIndex: constraint == UInt32.max ? nil : Int(constraint), source: source, kind: kind)
+    }
+
+    /// The container a signature requires (`AVContainerCode` raw value, 0 = none) and whether
+    /// it has other target-description conditions (hot path, no decoding).
+    @inline(__always)
+    func signatureContainerRule(_ index: Int) -> (container: UInt8, hasOthers: Bool)? {
+        let base = index * AVDatabaseFormat.signatureRecordSize
+        guard let container = signatureTable.u8(base + 26), let others = signatureTable.u8(base + 27) else { return nil }
+        return (container, others != 0)
     }
 
     /// Flags only (hot path for PUA / non-Mac filtering).
@@ -506,6 +549,8 @@ struct AVPrefilterTable {
     let slotMask: Int
     let tableShift: UInt32
     let candidates: AVByteView
+    /// One `AVQuickCheck` per candidate entry.
+    let checks: AVByteView
     let anchorCount: Int
 
     init?(_ section: AVByteView?) {
@@ -514,15 +559,18 @@ struct AVPrefilterTable {
               bitmapLog2 >= 6, bitmapLog2 <= 32, tableLog2 >= 1, tableLog2 <= 30 else { return nil }
         let bitmapBytes = (1 << Int(bitmapLog2)) / 8
         let slotBytes = (1 << Int(tableLog2)) * 8
+        let candidatesStart = 16 + bitmapBytes + slotBytes
         guard let bitmapView = section.slice(16, bitmapBytes), let bitmapBase = bitmapView.base,
               let slotView = section.slice(16 + bitmapBytes, slotBytes), let slotBase = slotView.base,
-              let candidates = section.slice(16 + bitmapBytes + slotBytes, candidateCount * 4) else { return nil }
+              let candidates = section.slice(candidatesStart, candidateCount * 4),
+              let checks = section.slice(candidatesStart + candidateCount * 4, candidateCount * 8) else { return nil }
         bitmap = bitmapBase.assumingMemoryBound(to: UInt64.self)
         bitmapShift = 32 - bitmapLog2
         slots = slotBase
         slotMask = (1 << Int(tableLog2)) - 1
         tableShift = 32 - tableLog2
         self.candidates = candidates
+        self.checks = checks
         self.anchorCount = Int(anchorCount)
     }
 
@@ -548,5 +596,11 @@ struct AVPrefilterTable {
     @inline(__always)
     func candidate(_ index: Int) -> Int? {
         candidates.u32le(index * 4).map(Int.init)
+    }
+
+    /// The `AVQuickCheck` of candidate entry `index` (none when out of range).
+    @inline(__always)
+    func check(_ index: Int) -> UInt64 {
+        checks.u64le(index * 8) ?? AVQuickCheck.none
     }
 }

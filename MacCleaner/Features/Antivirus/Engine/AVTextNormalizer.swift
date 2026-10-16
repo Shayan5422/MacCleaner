@@ -32,23 +32,37 @@ enum AVTextNormalizer {
 
     static func normalizeText(_ data: AVByteView) -> AVScratchBuffer? {
         guard let out = AVScratchBuffer(capacity: data.count + 1) else { return nil }
+        guard let input = data.base, data.count > 0 else { return out }
+        let output = out.base.assumingMemoryBound(to: UInt8.self)
+        var written = 0
         var spaceWritten = false
-        for index in 0..<data.count {
-            let c = data[index]
-            switch c {
-            case 0x09...0x0D, 0x20:
-                if !spaceWritten { out.append(0x20); spaceWritten = true }
-            case 0x00...0x08, 0x0E...0x1F:
-                continue
-            case 0x41...0x5A:
-                out.append(c | 0x20)
-                spaceWritten = false
-            default:
-                out.append(c)
-                spaceWritten = false
+        textMap.withUnsafeBufferPointer { map in
+            let bytes = input.assumingMemoryBound(to: UInt8.self)
+            for index in 0..<data.count {
+                let mapped = map[Int(bytes[index])]
+                if mapped == 0x20 {
+                    if !spaceWritten { output[written] = 0x20; written &+= 1; spaceWritten = true }
+                } else if mapped != 0 {
+                    output[written] = mapped
+                    written &+= 1
+                    spaceWritten = false
+                }
             }
         }
+        out.setCount(written)
         return out
+    }
+
+    /// Per input byte: 0 = dropped (control characters), 0x20 = whitespace, else the byte to
+    /// write (`A–Z` lowercased).
+    private static let textMap: [UInt8] = (0...255).map { value -> UInt8 in
+        let c = UInt8(value)
+        switch c {
+        case 0x09...0x0D, 0x20: return 0x20
+        case 0x00...0x08, 0x0E...0x1F: return 0
+        case 0x41...0x5A: return c | 0x20
+        default: return c
+        }
     }
 
     /// Returns (nocomment, notags) normalized versions of an HTML page.

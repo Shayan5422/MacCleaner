@@ -64,8 +64,14 @@ struct AVIgnoreList: Sendable {
 ///   `AVLogicalAnalysis.requiredSet` picks a set of "trigger" subsignatures such that the
 ///   signature can't match unless one of them did. The remaining ("deferred") subsignatures go
 ///   into a second table that is only scanned when a trigger matched in that file.
+/// * Each prefilter entry carries two more bytes of its pattern at fixed distances from the
+///   anchor (`AVQuickCheck`), compared before any other work: many signatures can only be
+///   anchored on content that is everywhere in some files (zero runs and padding in executables,
+///   a shared word in scripts). Patterns at a fixed offset also store where their anchor element
+///   can sit relative to their start, so hits far from that offset are dropped right away.
 /// * Patterns at a fixed offset without a usable anchor are checked directly at their offset;
-///   floating patterns without one ("weak") are scanned with a 2-byte table.
+///   floating patterns without one but with a 2–3 byte exact run go into a 2-byte-keyed table
+///   (`S…`); the few left ("weak") are searched one by one.
 final class AVDatabaseBuilder {
     /// The ClamAV functionality level this engine implements (see `AVEngine.functionalityLevel`).
     let functionalityLevel: Int
@@ -84,6 +90,8 @@ final class AVDatabaseBuilder {
     var subsigCount = 0
     var patternRecords = AVBinaryWriter()
     var patternCount = 0
+    /// Per pattern: its `AVQuickCheck` bytes (stored next to its prefilter entries).
+    var patternChecks = [UInt64]()
     var programBytes = AVBinaryWriter()
     var expressionBytes = AVBinaryWriter()
     var constraintRecords = AVBinaryWriter()
@@ -107,6 +115,9 @@ final class AVDatabaseBuilder {
     var anchoredPatterns = [[UInt32]](repeating: [], count: AVDatabaseFormat.targetCount)
     var weakPatterns = [[UInt32]](repeating: [], count: AVDatabaseFormat.targetCount)
     var deferredListPatterns = [[UInt32]](repeating: [], count: AVDatabaseFormat.targetCount)
+    /// Per target: (2-byte key << 32 | pattern) for floating patterns whose longest exact run is
+    /// 2–3 bytes, found in one shared pass instead of one search per pattern.
+    var shortAnchors = [[UInt64]](repeating: [], count: AVDatabaseFormat.targetCount)
 
     /// Digest lengths of MD5, SHA-1 and SHA-256, the index used by the hash tables below.
     static let digestLengths = [16, 20, 32]
@@ -395,7 +406,14 @@ final class AVDatabaseBuilder {
         signatureRecords.u32(constraintIndex)
         signatureRecords.u8(0) // source: ClamAV
         signatureRecords.u8(traits.kind == .pua ? 1 : (traits.kind == .testFile ? 2 : 0))
-        signatureRecords.zeros(6)
+        // The required container, readable without decoding the constraint record, and whether
+        // anything else (size, entry point, sections, intermediates) is constrained.
+        let container = constraints?.container.flatMap(AVContainerCode.init(clamType:))
+        var other = constraints ?? AVTargetConstraints()
+        other.container = nil
+        signatureRecords.u8(container?.rawValue ?? 0)
+        signatureRecords.u8(other.isEmpty ? 0 : 1)
+        signatureRecords.zeros(4)
         signatureCount += 1
         return signatureCount - 1
     }
@@ -422,7 +440,19 @@ final class AVDatabaseBuilder {
         patternRecords.u8(pattern.rightAssertion?.rawValue ?? 0)
         patternRecords.u8(0)
         patternRecords.u32(UInt32(clamping: encoded.minLength))
-        patternRecords.u32(0)
+        // Where the anchor element can sit relative to the pattern's start, so a hit on an
+        // anchored pattern far from its offset is dropped before any matching.
+        let anchorElement = encoded.anchor?.element ?? encoded.shortAnchorElement
+        let bounds = anchorElement.map { AVQuickCheck.prefixBounds(program: encoded.program, before: $0) } ?? (min: 0, max: 0xFFFF)
+        patternRecords.u16(bounds.min)
+        patternRecords.u16(bounds.max)
+        if let anchor = encoded.anchor {
+            patternChecks.append(AVQuickCheck.make(program: encoded.program, anchor: anchor))
+        } else if let element = encoded.shortAnchorElement {
+            patternChecks.append(AVQuickCheck.make(program: encoded.program, element: element, delta: 0, covered: 2))
+        } else {
+            patternChecks.append(AVQuickCheck.none)
+        }
         patternCount += 1
         return patternCount - 1
     }
@@ -437,20 +467,55 @@ final class AVDatabaseBuilder {
             }
         } else if offset.isAnchored {
             if trigger { anchoredPatterns[target].append(UInt32(index)) } else { deferredListPatterns[target].append(UInt32(index)) }
+        } else if trigger, let key = Self.shortAnchorKey(encoded) {
+            shortAnchors[target].append(UInt64(key) << 32 | UInt64(index))
         } else {
             if trigger { weakPatterns[target].append(UInt32(index)) } else { deferredListPatterns[target].append(UInt32(index)) }
         }
     }
 
-    /// Expected work a pattern adds to the main pass, per megabyte of input (lower is better).
+    /// The first two bytes of a pattern's short anchor (a literal element of 2–3 bytes), as the
+    /// scanner loads them (little-endian), or nil without one.
+    static func shortAnchorKey(_ encoded: AVProgramEncoder.Encoded) -> UInt32? {
+        guard let element = encoded.shortAnchorElement else { return nil }
+        return encoded.program.withUnsafeBytes { raw -> UInt32? in
+            guard let view = AVProgramView(AVByteView(raw)), let offset = view.elementOffset(element),
+                  view.bytes.u8(offset) == AVProgramOp.literal.rawValue, let length = view.bytes.u16le(offset + 1), length >= 2,
+                  let first = view.bytes.u8(offset + 3), let second = view.bytes.u8(offset + 4) else { return nil }
+            return UInt32(first) | UInt32(second) << 8
+        }
+    }
+
+    /// Expected work a pattern adds to the main pass, per megabyte of input (lower is better),
+    /// used to pick a logical signature's triggers.
     static func cost(of encoded: AVProgramEncoder.Encoded, offset: AVOffsetSpec) -> Double {
         if let anchor = encoded.anchor { return anchor.hitRate * Double(1 << 20) }
         if offset.isAnchored {
-            // Checked once per file; how often it fires depends on its leading bytes.
-            return max(pow(2, -Double(encoded.leadingExactScore) / 8), 1.0 / 16)
+            // Checked at one place per file; how often it fires depends on its leading bytes.
+            // Header fields, entry-point code and the first bytes of text files are common, so
+            // those keep a high floor. Only a binary (non-text) start of file that isn't a known
+            // file-type magic counts as rare: a pickle header, say, where a shared word like
+            // "torch" would otherwise make hundreds of signatures alive in every script.
+            let lead = encoded.leadingExact
+            let rareStart = offset.kind == .absolute && offset.value == 0 && lead.count >= 2
+                && lead.contains { $0 >= 0x80 || ($0 < 0x20 && $0 != 0x09 && $0 != 0x0A && $0 != 0x0D) }
+                && !Self.commonMagics.contains { lead.starts(with: $0) || $0.starts(with: lead) }
+            return max(pow(2, -Double(encoded.leadingExactScore) / 8), rareStart ? 1.0 / 65_536 : 1.0 / 16)
         }
         return 1e9 // weak: avoid as a trigger
     }
+
+    /// Leading bytes of common file types (and text starts) seen at offset 0.
+    static let commonMagics: [[UInt8]] = [
+        [0x4D, 0x5A], [0x7F, 0x45, 0x4C, 0x46], [0xCA, 0xFE, 0xBA, 0xBE], [0xCF, 0xFA, 0xED, 0xFE], [0xCE, 0xFA, 0xED, 0xFE],
+        [0xFE, 0xED, 0xFA, 0xCF], [0xFE, 0xED, 0xFA, 0xCE], [0x50, 0x4B], [0x1F, 0x8B], [0x42, 0x5A, 0x68], [0xFD, 0x37, 0x7A, 0x58],
+        [0x52, 0x61, 0x72, 0x21], [0x37, 0x7A, 0xBC, 0xAF], [0x4D, 0x53, 0x43, 0x46], [0xD0, 0xCF, 0x11, 0xE0], [0x25, 0x50, 0x44, 0x46],
+        [0x7B, 0x5C, 0x72, 0x74], [0x89, 0x50, 0x4E, 0x47], [0x47, 0x49, 0x46, 0x38], [0xFF, 0xD8, 0xFF], [0x49, 0x49, 0x2A, 0x00],
+        [0x4D, 0x4D, 0x00, 0x2A], [0x46, 0x57, 0x53], [0x43, 0x57, 0x53], [0x5A, 0x57, 0x53], [0x4C, 0x00, 0x00, 0x00],
+        [0x23, 0x21], [0xEF, 0xBB, 0xBF], [0xFF, 0xFE], [0xFE, 0xFF], [0x3C, 0x3F, 0x78, 0x6D, 0x6C], [0x3C, 0x3F, 0x70, 0x68, 0x70],
+        [0x3C, 0x21, 0x44, 0x4F, 0x43], [0x3C, 0x21, 0x64, 0x6F, 0x63], [0x3C, 0x68, 0x74, 0x6D, 0x6C], [0x3C, 0x48, 0x54, 0x4D, 0x4C],
+        [0x64, 0x65, 0x78, 0x0A], [0x21, 0x3C, 0x61, 0x72, 0x63, 0x68, 0x3E], [0x00, 0x00, 0x00], [0x20, 0x20], [0x0D, 0x0A], [0x0A],
+    ]
 
     // MARK: Logical signatures
 

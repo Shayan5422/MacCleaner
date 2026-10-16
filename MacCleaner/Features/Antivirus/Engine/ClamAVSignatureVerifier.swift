@@ -6,9 +6,16 @@ import Foundation
 /// * **CVD header signature** (`dsig`, the 7th header field): textbook RSA over the MD5 of the
 ///   archive. The signature is a 1024-bit integer `s` written in ClamAV's own base64 variant;
 ///   `s^e mod n` must equal the 16-byte MD5 (as an integer, so every higher byte is zero).
-/// * **Database index signature** (`DSIG:` line of `<name>.info` inside the archive, also used
-///   by CDIFF updates): RSA-PSS (RFC 8017 EMSA-PSS) with SHA-256, MGF1-SHA-256 and a 32-byte
-///   salt over the SHA-256 of the index text that precedes the `DSIG:` line, with a 2048-bit key.
+/// * **Database index signature** (`DSIG:` line of `<name>.info` inside the archive): RSA-PSS
+///   (RFC 8017 EMSA-PSS) with SHA-256, MGF1-SHA-256 and a 32-byte salt over the SHA-256 of the
+///   index text that precedes the `DSIG:` line, with a 2048-bit key (public exponent 100002049).
+///   Applying a CDIFF rewrites the index and replaces this line with a new one made with the
+///   same index key, which is why a `.cld` rebuilt from CDIFFs can still be checked here.
+///
+/// CDIFF patch files carry their own signature, made with a third, different ClamAV key (public
+/// exponent 100002053). The engine never reads CDIFFs (freshclam or the app's own updater
+/// applies them and checks that signature), so this type has no CDIFF key and nothing here
+/// relies on one.
 ///
 /// ClamAV's base64 variant: the alphabet is `a–z A–Z 0–9 + /` (lowercase first) and the
 /// characters are 6-bit digits of a little-endian number — the first character is the least
@@ -16,11 +23,12 @@ import Foundation
 ///
 /// The public keys are ClamAV's published verification keys (decimal), looked up as constants.
 enum ClamAVSignatureVerifier {
-    /// Key that signs `.cvd` headers (1024-bit modulus).
+    /// Key that signs `.cvd` headers (1024-bit modulus, public exponent 100001027).
     static let cvdModulus = AVBigUInt(decimal: "118640995551645342603070001658453189751527774412027743746599405743243142607464144767361060640655844749760788890022283424922762488917565551002467771109669598189410434699034532232228621591089508178591428456220796841621637175567590476666928698770143328137383952820383197532047771780196576957695822641224262693037")
     static let cvdExponent = AVBigUInt(decimal: "100001027")
 
-    /// Key that signs `.info` database indexes and CDIFFs (2048-bit modulus).
+    /// Key that signs the `DSIG:` line of `.info` database indexes (2048-bit modulus, public
+    /// exponent 100002049). It does not verify CDIFF files; those use a different key.
     static let indexModulus = AVBigUInt(decimal: "11088894983048545473659556106627194923928941791795047620591658697413581043322715912172496806525381055880964520618400224333320534660299233983755341740679502866829909679955734391392668378361221524205396631090105151641270857277080310734320951653700508941717419168723942507890702904702707587451621691050754307850383399865346487203798464178537392211402786481359824461197231102895415093770394216666324484593935762408468516826633192140826667923494822045805347809932848454845886971706424360558667862775876072059437703365380209101697738577515476935085469455279994113145977994084618328482151013142393373316337519977244732747977")
     static let indexExponent = AVBigUInt(decimal: "100002049")
 

@@ -31,8 +31,9 @@ struct ClamAVUnpackedDatabase: @unchecked Sendable {
 ///   freshclam after applying CDIFF updates. Its header is copied from the first line of the
 ///   database index `<name>.info`, where `md5` and `dsig` are `X`, so the header itself isn't
 ///   signed. The index is: it lists every database file with its size and SHA-256 and ends
-///   with a `DSIG:` line that ClamAV signs (each CDIFF replaces that line), which is what this
-///   reader verifies for `.cld` files.
+///   with a `DSIG:` line signed with ClamAV's index key (each CDIFF replaces that line with a
+///   new one made with the same key), which is what this reader verifies for `.cld` files. The
+///   CDIFF files' own signatures (a different key) are checked by whoever applies them, not here.
 enum ClamAVContainer {
     static let headerSize = 512
     /// Upper bound for a decompressed database (main.cvd unpacks to ~250 MB today).

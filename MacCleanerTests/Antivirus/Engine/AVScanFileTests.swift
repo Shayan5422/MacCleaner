@@ -103,6 +103,29 @@ struct AVScanFileTests {
         #expect(throws: AVEngineError.self) { _ = try AVEngine.load(from: directory.url) }
     }
 
+    @Test func databaseWithAnotherFormatVersionIsRejectedThenRebuilt() throws {
+        let directory = AVTestDirectory()
+        let container = try directory.write("test.cld", AVFixtures.cld(files: [("t.ndb", Data("Test.Version-1:0:*:\(AVFixtures.hex("format-version-marker"))\n".utf8))]))
+        let databaseDirectory = directory.file("db")
+        _ = try AVDatabaseCompiler.compile(AVDatabaseInputs(clamavFiles: [container]), into: databaseDirectory)
+        let file = databaseDirectory.appendingPathComponent(AVDatabaseFormat.fileName)
+        let original = try Data(contentsOf: file)
+        #expect(original.count > 12)
+        for other in [AVDatabaseFormat.version - 1, AVDatabaseFormat.version + 1] {
+            var bytes = original
+            bytes.replaceSubrange(8..<12, with: withUnsafeBytes(of: other.littleEndian) { Data($0) })
+            try bytes.write(to: file)
+            #expect(throws: AVEngineError.invalidDatabase(AVDatabaseFormat.versionMismatchMessage(found: other))) {
+                _ = try AVEngine.load(from: databaseDirectory)
+            }
+            #expect(AVDatabaseCompiler.installedSummary(in: databaseDirectory) == nil)
+        }
+        // Compiling again replaces the incompatible file.
+        _ = try AVDatabaseCompiler.compile(AVDatabaseInputs(clamavFiles: [container]), into: databaseDirectory)
+        let engine = try AVEngine.load(from: databaseDirectory)
+        #expect(engine.names(Data("..format-version-marker..".utf8) + AVFixtures.filler(64)) == ["Test.Version-1"])
+    }
+
     @Test func failedCompileLeavesThePreviousDatabase() throws {
         let directory = AVTestDirectory()
         let good = try directory.write("test.cld", AVFixtures.cld(files: [("t.ndb", Data("Test.Keep-1:0:*:\(AVFixtures.hex("keep-this-signature"))\n".utf8))]))

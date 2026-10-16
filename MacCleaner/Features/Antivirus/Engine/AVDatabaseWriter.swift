@@ -6,11 +6,26 @@ extension AVDatabaseBuilder {
     /// Names per compressed block. Names are only read when something is detected.
     static let namesPerBlock = 256
 
+    /// Below this many patterns for a target, short-anchor patterns are searched one by one.
+    static let minimumShortTablePatterns = 16
+
     /// Writes the database to `url` (the caller renames it into place). Sections are written as
     /// soon as they're built and the builder's buffers are released along the way, to keep the
     /// compiler's peak memory down.
     func write(to url: URL, summary: AVDatabaseSummary) throws {
         let file = try AVSectionFileWriter(url: url)
+
+        // A 2-byte-keyed pass costs about as much as a prefilter pass; for a handful of
+        // patterns one search each (memchr on their rarest byte) is cheaper, so those stay weak.
+        var shortTableTargets = Set<Int>()
+        for target in 0..<AVDatabaseFormat.targetCount {
+            let patterns = Set(shortAnchors[target].map { UInt32(truncatingIfNeeded: $0) })
+            if patterns.count >= Self.minimumShortTablePatterns {
+                shortTableTargets.insert(target)
+            } else {
+                weakPatterns[target] += patterns.sorted()
+            }
+        }
 
         var metadata = AVDatabaseMetadata(formatVersion: AVDatabaseFormat.version, engineFunctionalityLevel: functionalityLevel, summary: summary)
         metadata.md5Wildcard = fileHashWildcard[0]
@@ -48,11 +63,11 @@ extension AVDatabaseBuilder {
         for target in 0..<AVDatabaseFormat.targetCount {
             if target == 0 || !triggerAnchors[target].isEmpty {
                 let entries = target == 0 ? triggerAnchors[0] : triggerAnchors[0] + triggerAnchors[target]
-                try file.add(AVDatabaseFormat.prefilter(target), Self.prefilterTable(entries))
+                try file.add(AVDatabaseFormat.prefilter(target), Self.prefilterTable(entries, checks: patternChecks))
             }
             if target == 0 || !deferredAnchors[target].isEmpty {
                 let entries = target == 0 ? deferredAnchors[0] : deferredAnchors[0] + deferredAnchors[target]
-                try file.add(AVDatabaseFormat.deferredPrefilter(target), Self.prefilterTable(entries))
+                try file.add(AVDatabaseFormat.deferredPrefilter(target), Self.prefilterTable(entries, checks: patternChecks))
             }
             if !anchoredPatterns[target].isEmpty {
                 try file.add(AVDatabaseFormat.anchored(target), Self.list(anchoredPatterns[target]))
@@ -63,9 +78,15 @@ extension AVDatabaseBuilder {
             if !deferredListPatterns[target].isEmpty {
                 try file.add(AVDatabaseFormat.deferredList(target), Self.list(deferredListPatterns[target]))
             }
+            if shortTableTargets.contains(target) {
+                let entries = target == 0 || !shortTableTargets.contains(0) ? shortAnchors[target] : shortAnchors[0] + shortAnchors[target]
+                try file.add(AVDatabaseFormat.shortPrefilter(target), Self.prefilterTable(entries, checks: patternChecks))
+            }
         }
         triggerAnchors = []
         deferredAnchors = []
+        shortAnchors = []
+        patternChecks = []
 
         let fileTags = [AVDatabaseFormat.fileMD5, AVDatabaseFormat.fileSHA1, AVDatabaseFormat.fileSHA256]
         let fileSizeTags = [AVDatabaseFormat.fileMD5Sizes, AVDatabaseFormat.fileSHA1Sizes, AVDatabaseFormat.fileSHA256Sizes]
@@ -131,10 +152,14 @@ extension AVDatabaseBuilder {
     }
 
     /// Builds a prefilter table (see `AVPrefilterTable`) from (anchor << 32 | pattern) entries.
-    static func prefilterTable(_ entries: [UInt64]) -> [UInt8] {
+    /// Layout: u32 bitmap log2, u32 table log2, u32 candidate count, u32 anchor count; bitmap;
+    /// slots (u32 anchor, u32 first candidate); candidates (u32: a count, then that many pattern
+    /// indices, per anchor); then one u64 `AVQuickCheck` per candidate entry (0 for counts).
+    static func prefilterTable(_ entries: [UInt64], checks: [UInt64]) -> [UInt8] {
         let sorted = entries.sorted()
         var anchors = [UInt32]()
         var candidates = [UInt32]()
+        var candidateChecks = [UInt64]()
         var starts = [UInt32]()
         var index = 0
         while index < sorted.count {
@@ -149,7 +174,9 @@ extension AVDatabaseBuilder {
             anchors.append(anchor)
             starts.append(UInt32(candidates.count))
             candidates.append(UInt32(patterns.count))
+            candidateChecks.append(AVQuickCheck.none)
             candidates.append(contentsOf: patterns)
+            for pattern in patterns { candidateChecks.append(Int(pattern) < checks.count ? checks[Int(pattern)] : AVQuickCheck.none) }
             index = end
         }
         // Bitmap: ~64 bits per anchor keeps false positives near 1.5%.
@@ -173,7 +200,7 @@ extension AVDatabaseBuilder {
             // Stored little-endian as (u32 key, u32 start).
             slots[slot] = UInt64(starts[position]) << 32 | UInt64(anchor)
         }
-        var writer = AVBinaryWriter(capacity: 16 + bitmap.count * 8 + slotCount * 8 + candidates.count * 4)
+        var writer = AVBinaryWriter(capacity: 16 + bitmap.count * 8 + slotCount * 8 + candidates.count * 12)
         writer.u32(bitmapLog2)
         writer.u32(tableLog2)
         writer.u32(UInt32(candidates.count))
@@ -181,6 +208,7 @@ extension AVDatabaseBuilder {
         for word in bitmap { writer.u64(word) }
         for slot in slots { writer.u64(slot) }
         for value in candidates { writer.u32(value) }
+        for check in candidateChecks { writer.u64(check) }
         return writer.bytes
     }
 

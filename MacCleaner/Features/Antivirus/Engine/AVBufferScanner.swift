@@ -54,7 +54,17 @@ enum AVBufferScanner {
     }
 }
 
-/// One pass of the signature matcher over one buffer.
+/// One pass of the signature matcher over one buffer:
+/// 1. the 4-byte prefilter (`P…`) over every window (a run of one byte value handled as a whole),
+///    each hit's candidates screened by their `AVQuickCheck` bytes and, for patterns at a fixed
+///    offset, by where that offset allows the anchor, before any matching;
+/// 2. the 2-byte-keyed table (`S…`) for floating patterns without a 4-byte anchor;
+/// 3. patterns at a fixed offset without an anchor (indexed by offset and first bytes, see
+///    `AVAnchoredIndex`) and the few remaining weak ones;
+/// 4. when a logical signature with deferred subsignatures is alive: their patterns, through a
+///    per-buffer table when few (for the buffer's size), else the database's `D…` table, plus the
+///    alive ones without a 4-byte anchor through a shared 2-byte-keyed pass;
+/// 5. the logical expressions of the alive signatures.
 final class AVBufferPass {
     let core: AVEngineCore
     let db: AVMappedDatabase
@@ -70,10 +80,16 @@ final class AVBufferPass {
     @exclusivity(unchecked) private var bodyMatches = [Int]()
     private let gapMemo = AVGapMemo()
     /// Logical signatures with at least one matched subsignature: usually a handful, so they're
-    /// kept in parallel arrays searched linearly (with a dictionary index once there are many).
+    /// kept in parallel arrays searched linearly (with a hash index once there are many).
     @exclusivity(unchecked) private var stateSignatures = [Int]()
     @exclusivity(unchecked) private var stateList = [LogicalState]()
-    @exclusivity(unchecked) private var stateIndex = [Int: Int]()
+    /// Per state, bit `i`: subsignature `i` has every match the expression can use. Hits for
+    /// such subsignatures are dropped before any other work.
+    @exclusivity(unchecked) private var saturated = [UInt64]()
+    @exclusivity(unchecked) private var stateIndex = SlotIndex()
+    /// Logical signatures whose target description (container, file size, entry point,
+    /// sections) rules them out for this buffer; their hits are dropped before any matching.
+    @exclusivity(unchecked) private var ruledOut = SlotIndex()
     @exclusivity(unchecked) private var latin1: NSString?
     private static let linearStateLimit = 24
 
@@ -83,21 +99,28 @@ final class AVBufferPass {
             for (slot, candidate) in stateSignatures.enumerated() where candidate == signature { return slot }
             return nil
         }
-        return stateIndex[signature]
+        return stateIndex.find(signature)
     }
 
     private func addState(_ signature: Int, _ state: LogicalState) -> Int {
         stateSignatures.append(signature)
         stateList.append(state)
+        saturated.append(0)
         let slot = stateList.count - 1
         if stateSignatures.count > Self.linearStateLimit {
             if stateIndex.isEmpty {
-                for (index, candidate) in stateSignatures.enumerated() { stateIndex[candidate] = index }
+                for (index, candidate) in stateSignatures.enumerated() { stateIndex.insert(candidate, slot: index) }
             } else {
-                stateIndex[signature] = slot
+                stateIndex.insert(signature, slot: slot)
             }
         }
         return slot
+    }
+
+    /// Does subsignature `subsig` of the signature in `slot` have every match it needs?
+    @inline(__always)
+    private func isSaturated(_ slot: Int, _ subsig: Int) -> Bool {
+        saturated[slot] & (1 &<< UInt64(truncatingIfNeeded: subsig & 63)) != 0
     }
 
     struct LogicalState {
@@ -106,6 +129,54 @@ final class AVBufferPass {
         var positions: [[Int]]
         var hasDeferred: Bool
         var firstSubsig: Int
+    }
+
+    /// Signature → state slot once many logical signatures are alive: open addressing with a
+    /// multiplicative hash. (A `Dictionary` spent most of the scan time hashing when a script kept
+    /// hundreds of signatures alive.)
+    struct SlotIndex {
+        private var keys = [Int]()
+        private var slots = [Int32]()
+        private var mask = 0
+        private(set) var count = 0
+
+        var isEmpty: Bool { count == 0 }
+
+        @inline(__always)
+        private func bucket(_ key: Int) -> Int {
+            Int(truncatingIfNeeded: (UInt64(truncatingIfNeeded: key) &* 0x9E37_79B9_7F4A_7C15) &>> 32) & mask
+        }
+
+        @inline(__always)
+        func find(_ key: Int) -> Int? {
+            guard count > 0 else { return nil }
+            var index = bucket(key)
+            while true {
+                let candidate = keys[index]
+                if candidate == key { return Int(slots[index]) }
+                if candidate < 0 { return nil }
+                index = (index &+ 1) & mask
+            }
+        }
+
+        mutating func insert(_ key: Int, slot: Int) {
+            if (count + 1) * 2 > keys.count { grow() }
+            var index = bucket(key)
+            while keys[index] >= 0, keys[index] != key { index = (index &+ 1) & mask }
+            if keys[index] < 0 { count += 1 }
+            keys[index] = key
+            slots[index] = Int32(truncatingIfNeeded: slot)
+        }
+
+        private mutating func grow() {
+            let entries = zip(keys, slots).filter { $0.0 >= 0 }
+            let capacity = max(512, keys.count * 2)
+            keys = [Int](repeating: -1, count: capacity)
+            slots = [Int32](repeating: 0, count: capacity)
+            mask = capacity - 1
+            count = 0
+            for (key, slot) in entries { insert(key, slot: Int(slot)) }
+        }
     }
 
     static let maxRecordedPositions = 64
@@ -132,21 +203,40 @@ final class AVBufferPass {
         if floating, let table = db.prefilters[tableTarget] ?? db.prefilters[0] {
             prefilterPass(table, deferred: false)
         }
+        if floating, let table = db.shortPrefilters[tableTarget] ?? db.shortPrefilters[0] {
+            shortPrefilterPass(table)
+        }
         for t in targets {
-            for index in patternList(db.anchoredLists[t]) { checkListed(index, deferred: false) }
+            let index = core.anchoredIndex[t]
+            if let base = data.base {
+                for offset in index.offsets {
+                    guard offset + 2 <= data.count else { break }
+                    let key = UInt64(offset) << 16 | UInt64(UInt16(littleEndian: base.loadUnaligned(fromByteOffset: offset, as: UInt16.self)))
+                    for pattern in index.keyed[key] ?? [] { checkListed(Int(pattern), deferred: false) }
+                }
+            }
+            for pattern in index.others { checkListed(Int(pattern), deferred: false) }
             if floating {
-                for index in patternList(db.weakLists[t]) { checkListed(index, deferred: false) }
+                forEachPattern(in: db.weakLists[t]) { checkListed($0, deferred: false) }
             }
         }
         if stateList.contains(where: \.hasDeferred) {
-            if let alive = aliveDeferredPatterns(), alive.count <= Self.dynamicDeferredLimit {
-                // Few signatures are alive: scan only for their deferred patterns.
+            if let alive = aliveDeferredPatterns(limit: Self.dynamicDeferredLimit(bufferSize: data.count)) {
+                // Few signatures are alive (for this buffer's size): scan only for their deferred patterns.
                 dynamicDeferredPass(alive)
             } else if let table = db.deferredPrefilters[tableTarget] ?? db.deferredPrefilters[0] {
                 prefilterPass(table, deferred: true)
             }
+            // Patterns without a 4-byte anchor, of signatures that are alive (the lists hold
+            // every signature's): those with a short exact window share one pass.
+            var listed = [Int]()
             for t in targets {
-                for index in patternList(db.deferredLists[t]) { checkListed(index, deferred: true) }
+                forEachPattern(in: db.deferredLists[t]) { index in
+                    if !patternIsDone(index, deferred: true) { listed.append(index) }
+                }
+            }
+            if !listed.isEmpty {
+                for index in shortDeferredPass(listed) { checkListed(index, deferred: true) }
             }
         }
 
@@ -164,25 +254,35 @@ final class AVBufferPass {
         return matches
     }
 
-    private func patternList(_ list: AVByteView) -> [Int] {
-        guard let count = list.u32le(0).map(Int.init), count > 0 else { return [] }
-        return (0..<count).compactMap { list.u32le(4 + $0 * 4).map(Int.init) }
+    /// Calls `body` with each pattern index of a list section (u32 count, then the indices).
+    @inline(__always)
+    private func forEachPattern(in list: AVByteView, _ body: (Int) -> Void) {
+        guard let count = list.u32le(0).map(Int.init), count > 0 else { return }
+        for k in 0..<count {
+            guard let index = list.u32le(4 + k * 4) else { return }
+            body(Int(index))
+        }
     }
 
     // MARK: Deferred subsignatures
 
     /// Above this many patterns, the database's deferred table is used instead of a per-buffer one.
-    static let dynamicDeferredLimit = 512
+    /// Setting up the per-buffer table costs about a microsecond per pattern; the database's
+    /// deferred table costs several nanoseconds per input byte. Small buffers use the database's.
+    static func dynamicDeferredLimit(bufferSize: Int) -> Int {
+        max(512, min(16_384, bufferSize / 128))
+    }
 
-    /// Deferred (non-trigger) body patterns of the logical signatures that are alive in this buffer.
-    private func aliveDeferredPatterns() -> [Int]? {
+    /// Deferred (non-trigger) body patterns of the logical signatures that are alive in this
+    /// buffer, or nil when there are more than `limit`.
+    private func aliveDeferredPatterns(limit: Int) -> [Int]? {
         var patterns = [Int]()
         for (slot, signature) in stateSignatures.enumerated() where stateList[slot].hasDeferred {
             guard let record = db.signature(signature) else { continue }
             for id in 0..<record.subsigCount {
                 guard let subsig = db.subsig(record.firstSubsig + id), subsig.kind == .body, !subsig.isTrigger else { continue }
                 for k in 0..<subsig.patternCount { patterns.append(subsig.first + k) }
-                if patterns.count > Self.dynamicDeferredLimit { return nil }
+                if patterns.count > limit { return nil }
             }
         }
         return patterns
@@ -201,42 +301,168 @@ final class AVBufferPass {
         for k in 0..<4 {
             guard let mask = pattern.program.bytes.u8(offset + 3 + pattern.anchorDelta + k),
                   let value = pattern.program.bytes.u8(offset + 3 + length + pattern.anchorDelta + k) else { return nil }
-            let byte = AVMaskedByte(mask: mask, value: value)
-            let choices = (0...255).compactMap { byte.matches(UInt8($0)) ? UInt8($0) : nil }
-            guard values.count * choices.count <= AVProgramEncoder.maxAnchorVariants else { return nil }
+            // Every byte with `byte & mask == value`: the free bits take all combinations.
+            let free = ~mask
+            guard values.count << free.nonzeroBitCount <= AVProgramEncoder.maxAnchorVariants else { return nil }
+            var choices = [UInt8]()
+            var subset: UInt8 = 0
+            repeat {
+                choices.append((value & mask) | subset)
+                subset = (subset &- free) & free
+            } while subset != 0
             values = values.flatMap { prefix in choices.map { prefix | UInt32($0) << (8 * UInt32(k)) } }
         }
         return values
     }
 
-    /// A one-off prefilter (64 Ki-bit bitmap + dictionary) over the given patterns' anchors.
+    /// A one-off prefilter over the given patterns' anchors.
     private func dynamicDeferredPass(_ patterns: [Int]) {
-        var byAnchor = [UInt32: [Int]]()
-        var bitmap = [UInt64](repeating: 0, count: 1024)
+        var entries = [(value: UInt32, pattern: Int32)]()
+        entries.reserveCapacity(patterns.count)
         for index in patterns {
             guard let pattern = db.pattern(index), let values = anchorValues(pattern) else { continue }
-            for value in values {
-                byAnchor[value, default: []].append(index)
-                let h = Int((value &* AVDatabaseFormat.bitmapMultiplier) &>> 16)
-                bitmap[h &>> 6] |= 1 &<< UInt64(h & 63)
+            for value in values { entries.append((value, Int32(truncatingIfNeeded: index))) }
+        }
+        keyedPass(&entries, width: 4) { index, position in
+            self.checkCandidate(index, anchorPosition: position, deferred: true)
+        }
+    }
+
+    /// Deferred patterns without a 4-byte anchor that have a 2-byte window with at most four
+    /// variants (an exact pair, or a case-insensitive one): found in one shared pass keyed by
+    /// that window instead of one scan each. Returns the patterns it couldn't take.
+    private func shortDeferredPass(_ indices: [Int]) -> [Int] {
+        var keyed = [AVMappedDatabase.Pattern]()
+        var entries = [(value: UInt32, pattern: Int32)]()
+        var leftovers = [Int]()
+        for index in indices {
+            guard var pattern = db.pattern(index), !pattern.offset.isAnchored, let window = Self.shortWindow(pattern.program) else {
+                leftovers.append(index)
+                continue
+            }
+            pattern.anchorElement = window.element
+            pattern.anchorDelta = window.delta
+            let slot = Int32(keyed.count)
+            keyed.append(pattern)
+            for key in window.keys { entries.append((key, slot)) }
+            shortDeferredIndices.append(index)
+        }
+        keyedPass(&entries, width: 2) { slot, position in
+            let index = self.shortDeferredIndices[slot]
+            guard !self.patternIsDone(index, deferred: true) else { return }
+            let pattern = keyed[slot]
+            guard let subsig = pattern.subsig, self.shouldCheck(signature: pattern.signature, subsig: subsig, deferred: true),
+                  let start = self.verify(pattern, index: index, anchorPosition: position) else { return }
+            self.record(pattern, start: start)
+        }
+        shortDeferredIndices.removeAll()
+        return leftovers
+    }
+
+    /// Pattern indices of `shortDeferredPass`'s slots.
+    @exclusivity(unchecked) private var shortDeferredIndices = [Int]()
+
+    /// The rarest 2-byte window (at most 4 variants) inside a LIT or MASK element of a program.
+    static func shortWindow(_ program: AVProgramView) -> (element: Int, delta: Int, keys: [UInt32])? {
+        var best: (element: Int, delta: Int, keys: [UInt32], probability: Double)?
+        for element in 0..<program.elementCount {
+            guard let offset = program.elementOffset(element), let op = program.bytes.u8(offset),
+                  op == AVProgramOp.literal.rawValue || op == AVProgramOp.masked.rawValue,
+                  let length = program.bytes.u16le(offset + 1).map(Int.init), length >= 2 else { continue }
+            func byte(_ k: Int) -> (mask: UInt8, value: UInt8)? {
+                if op == AVProgramOp.literal.rawValue { return program.bytes.u8(offset + 3 + k).map { (0xFF, $0) } }
+                guard let mask = program.bytes.u8(offset + 3 + k), let value = program.bytes.u8(offset + 3 + length + k) else { return nil }
+                return (mask, value & mask)
+            }
+            for delta in 0...(length - 2) {
+                guard let first = byte(delta), let second = byte(delta + 1),
+                      (~first.mask).nonzeroBitCount + (~second.mask).nonzeroBitCount <= 2 else { continue }
+                var keys = [UInt32]()
+                var probability = 0.0
+                for a in Self.variants(first) {
+                    for b in Self.variants(second) {
+                        keys.append(UInt32(a) | UInt32(b) << 8)
+                        probability += exp2(-Double(Int(AVByteRarity.score[Int(a)]) + Int(AVByteRarity.score[Int(b)])) / 8)
+                    }
+                }
+                if best == nil || probability < best!.probability { best = (element, delta, keys, probability) }
             }
         }
-        guard !byAnchor.isEmpty, let base = data.base, data.count >= 4 else { return }
-        bitmap.withUnsafeBufferPointer { bits in
-            let end = data.count - 3
-            var position = 0
-            while position < end {
-                let value = UInt32(littleEndian: base.loadUnaligned(fromByteOffset: position, as: UInt32.self))
-                let h = Int((value &* AVDatabaseFormat.bitmapMultiplier) &>> 16)
-                if bits[h &>> 6] & (1 &<< UInt64(h & 63)) != 0, let candidates = byAnchor[value] {
-                    for index in candidates { checkCandidate(index, anchorPosition: position, deferred: true) }
+        return best.map { ($0.element, $0.delta, $0.keys) }
+    }
+
+    /// Every byte `b` with `b & mask == value`.
+    private static func variants(_ byte: (mask: UInt8, value: UInt8)) -> [UInt8] {
+        let free = ~byte.mask
+        var out = [UInt8]()
+        var subset: UInt8 = 0
+        repeat {
+            out.append(byte.value | subset)
+            subset = (subset &- free) & free
+        } while subset != 0
+        return out
+    }
+
+    /// One pass over the buffer for a set of (key, payload) entries, keys being the 4-byte
+    /// (`width` 4) or 2-byte (`width` 2) little-endian value at a position: a bitmap (≥ 32 bits
+    /// per key) and an open-addressing table from key to the entries sorted by key. Calls
+    /// `hit(payload, position)` for every entry whose key is at `position`.
+    private func keyedPass(_ entries: inout [(value: UInt32, pattern: Int32)], width: Int, hit: (Int, Int) -> Void) {
+        guard !entries.isEmpty, let base = data.base, data.count >= width else { return }
+        entries.sort { $0.value < $1.value }
+
+        var bitmapLog2 = 16
+        while bitmapLog2 < 22, (1 << bitmapLog2) < entries.count * 32 { bitmapLog2 += 1 }
+        var bitmap = [UInt64](repeating: 0, count: (1 << bitmapLog2) / 64)
+        let bitmapShift = UInt32(32 - bitmapLog2)
+        var tableLog2 = 4
+        while (1 << tableLog2) < entries.count * 2 { tableLog2 += 1 }
+        let tableMask = (1 << tableLog2) - 1
+        let tableShift = UInt32(32 - tableLog2)
+        // Slot: anchor value, first entry, entry count (count 0 = empty).
+        var keys = [UInt32](repeating: 0, count: 1 << tableLog2)
+        var firsts = [Int32](repeating: 0, count: 1 << tableLog2)
+        var counts = [Int32](repeating: 0, count: 1 << tableLog2)
+        var start = 0
+        while start < entries.count {
+            let value = entries[start].value
+            var end = start + 1
+            while end < entries.count, entries[end].value == value { end += 1 }
+            let h = Int((value &* AVDatabaseFormat.bitmapMultiplier) &>> bitmapShift)
+            bitmap[h &>> 6] |= 1 &<< UInt64(h & 63)
+            var slot = Int((value &* AVDatabaseFormat.tableMultiplier) &>> tableShift)
+            while counts[slot] != 0 { slot = (slot &+ 1) & tableMask }
+            keys[slot] = value
+            firsts[slot] = Int32(start)
+            counts[slot] = Int32(end - start)
+            start = end
+        }
+
+        let end = data.count - (width - 1)
+        var position = 0
+        while position < end {
+            let value = width == 4 ? UInt32(littleEndian: base.loadUnaligned(fromByteOffset: position, as: UInt32.self))
+                                   : UInt32(UInt16(littleEndian: base.loadUnaligned(fromByteOffset: position, as: UInt16.self)))
+            let h = Int((value &* AVDatabaseFormat.bitmapMultiplier) &>> bitmapShift)
+            if bitmap[h &>> 6] & (1 &<< UInt64(h & 63)) != 0 {
+                var slot = Int((value &* AVDatabaseFormat.tableMultiplier) &>> tableShift)
+                while counts[slot] != 0 {
+                    if keys[slot] == value {
+                        let first = Int(firsts[slot])
+                        for k in first..<(first + Int(counts[slot])) { hit(Int(entries[k].pattern), position) }
+                        break
+                    }
+                    slot = (slot &+ 1) & tableMask
                 }
-                position &+= 1
             }
+            position &+= 1
         }
     }
 
     // MARK: Prefilter
+
+    /// Runs of one byte value at least this long are handled as a whole (see `runCandidates`).
+    static let longRunLength = 8
 
     /// Hashes every 4-byte window into the table's bitmap; set bits lead to candidate patterns.
     private func prefilterPass(_ table: AVPrefilterTable, deferred: Bool) {
@@ -245,53 +471,206 @@ final class AVBufferPass {
         let shift = table.bitmapShift
         let end = data.count - 3
         var position = 0
+        var measuredRunEnd = 0
         while position < end {
             let value = UInt32(littleEndian: base.loadUnaligned(fromByteOffset: position, as: UInt32.self))
             let h = Int((value &* AVDatabaseFormat.bitmapMultiplier) &>> shift)
             if bitmap[h &>> 6] & (1 &<< UInt64(h & 63)) != 0 {
+                // Inside a long run of one byte (zero padding, fill) every window is the same.
+                if position >= measuredRunEnd, value == (value & 0xFF) &* 0x0101_0101 {
+                    measuredRunEnd = runEnd(from: position)
+                    if measuredRunEnd - position >= Self.longRunLength {
+                        runCandidates(table, value, runStart: position, runEnd: measuredRunEnd, window: 4, deferred: deferred)
+                        position = measuredRunEnd - 3
+                        continue
+                    }
+                }
                 candidates(table, value, position, deferred: deferred)
             }
             position &+= 1
         }
     }
 
+    /// The 2-byte-keyed pass for floating patterns without a 4-byte anchor (their 2–3 byte
+    /// literal is the key); replaces one search per pattern.
+    private func shortPrefilterPass(_ table: AVPrefilterTable) {
+        guard let base = data.base, data.count >= 2 else { return }
+        let bitmap = table.bitmap
+        let shift = table.bitmapShift
+        let end = data.count - 1
+        var position = 0
+        var measuredRunEnd = 0
+        while position < end {
+            let value = UInt32(UInt16(littleEndian: base.loadUnaligned(fromByteOffset: position, as: UInt16.self)))
+            let h = Int((value &* AVDatabaseFormat.bitmapMultiplier) &>> shift)
+            if bitmap[h &>> 6] & (1 &<< UInt64(h & 63)) != 0 {
+                if position >= measuredRunEnd, value == (value & 0xFF) &* 0x0101 {
+                    measuredRunEnd = runEnd(from: position)
+                    if measuredRunEnd - position >= Self.longRunLength {
+                        runCandidates(table, value, runStart: position, runEnd: measuredRunEnd, window: 2, deferred: false)
+                        position = measuredRunEnd - 1
+                        continue
+                    }
+                }
+                candidates(table, value, position, deferred: false)
+            }
+            position &+= 1
+        }
+    }
+
+    /// End (exclusive) of the run of the byte at `start`.
+    private func runEnd(from start: Int) -> Int {
+        guard let base = data.base, start < data.count else { return start }
+        let byte = base.load(fromByteOffset: start, as: UInt8.self)
+        let word = UInt64(byte) &* 0x0101_0101_0101_0101
+        var end = start
+        while end + 8 <= data.count, base.loadUnaligned(fromByteOffset: end, as: UInt64.self) == word { end += 8 }
+        while end < data.count, base.load(fromByteOffset: end, as: UInt8.self) == byte { end += 1 }
+        return end
+    }
+
     @inline(never)
     private func candidates(_ table: AVPrefilterTable, _ value: UInt32, _ position: Int, deferred: Bool) {
-        guard let (start, count) = table.lookup(value) else { return }
+        guard let (start, count) = table.lookup(value), let base = data.base else { return }
+        let size = data.count
         for k in 0..<count {
+            // Two bytes at fixed distances from the anchor come first: most hits on anchors that
+            // are common in some files (zero runs, padding, a shared word) end here.
+            guard AVQuickCheck.passes(table.check(start + k), base: base, count: size, at: position) else { continue }
             guard let index = table.candidate(start + k) else { return }
             checkCandidate(index, anchorPosition: position, deferred: deferred)
         }
     }
 
-    /// Cheap filters before full verification: options, already-matched signatures, saturated counts.
+    /// All windows inside a run of one byte (`runStart..<runEnd`, `window` bytes each) have the
+    /// same value, so each candidate is only tried where it can match: a check byte that the
+    /// run's byte fails can only pass where it falls outside the run, which leaves a few
+    /// positions at the run's edges. Candidates without such a check are tried everywhere until
+    /// their signature has what it needs.
+    @inline(never)
+    private func runCandidates(_ table: AVPrefilterTable, _ value: UInt32, runStart: Int, runEnd: Int, window: Int, deferred: Bool) {
+        guard let (start, count) = table.lookup(value), let base = data.base else { return }
+        let byte = UInt8(truncatingIfNeeded: value)
+        let size = data.count
+        let last = runEnd - window
+        for k in 0..<count {
+            let packed = table.check(start + k)
+            var low = runStart, high = last
+            var shift: UInt64 = 0
+            while shift < 64 {
+                let field = packed &>> shift
+                let mask = UInt8(truncatingIfNeeded: field &>> 24)
+                if mask == 0 { break }
+                if byte & mask != UInt8(truncatingIfNeeded: field &>> 16) {
+                    let distance = Int(Int16(truncatingIfNeeded: field))
+                    if distance >= 0 { low = max(low, runEnd - distance) } else { high = min(high, runStart - distance - 1) }
+                }
+                shift += 32
+            }
+            guard low <= high, let index = table.candidate(start + k), !patternIsDone(index, deferred: deferred) else { continue }
+            for position in low...high where AVQuickCheck.passes(packed, base: base, count: size, at: position) {
+                checkCandidate(index, anchorPosition: position, deferred: deferred)
+                if patternIsDone(index, deferred: deferred) { break }
+            }
+        }
+    }
+
+    /// Nothing more to find for this pattern in this buffer: its body signature already matched,
+    /// its subsignature has every match it needs, its signature is ruled out, or (in the
+    /// deferred pass) its signature isn't alive.
+    private func patternIsDone(_ index: Int, deferred: Bool) -> Bool {
+        let base = index * AVDatabaseFormat.patternRecordSize
+        guard let signature = db.patternTable.u32le(base).map(Int.init), let subsig = db.patternTable.u8(base + 16) else { return true }
+        if subsig == 0xFF { return bodyMatches.contains(signature) }
+        guard let slot = stateSlot(signature) else { return deferred || (!ruledOut.isEmpty && ruledOut.find(signature) != nil) }
+        return isSaturated(slot, Int(subsig))
+    }
+
+    /// Cheap filters before full verification: options, already-matched signatures, saturated
+    /// counts, and target-description conditions that rule the signature out for this buffer.
     private func shouldCheck(signature: Int, subsig: Int?, deferred: Bool) -> Bool {
         guard let flags = db.signatureFlags(signature) else { return false }
         if flags.contains(.pua) && !options.detectPUA { return false }
         if flags.contains(.nonMac) && !options.detectNonMacThreats { return false }
         guard let subsig else { return !bodyMatches.contains(signature) }
-        guard let slot = stateSlot(signature) else { return !deferred }
-        let state = stateList[slot]
-        return subsig >= state.counts.count || state.counts[subsig] < state.needed[subsig]
+        guard let slot = stateSlot(signature) else {
+            guard !deferred else { return false }
+            // Container, file size, entry point and section conditions don't depend on matches:
+            // check them on the signature's first hit (the container from the signature record,
+            // the rest decoded only when present) and remember a failure as a state.
+            if flags.contains(.hasConstraints) {
+                let holds = containerRuleHolds(signature)
+                    && (db.signatureContainerRule(signature)?.hasOthers == false || otherConstraintsHold(signature))
+                if !holds {
+                    ruledOut.insert(signature, slot: 0)
+                    return false
+                }
+            }
+            return true
+        }
+        return !isSaturated(slot, subsig)
+    }
+
+    /// The container a signature requires (from its record), if any, is this buffer's.
+    @inline(__always)
+    private func containerRuleHolds(_ signature: Int) -> Bool {
+        guard let rule = db.signatureContainerRule(signature), rule.container != 0 else { return true }
+        if rule.container == AVContainerCode.any.rawValue { return containers.isEmpty }
+        return containers.last?.rawValue == rule.container
+    }
+
+    /// The constraint record's conditions (decoded).
+    private func otherConstraintsHold(_ signature: Int) -> Bool {
+        guard let record = db.signature(signature), let index = record.constraintIndex else { return true }
+        guard let constraints = db.constraints(index) else { return false }
+        return constraintsHold(constraints)
     }
 
     private func checkCandidate(_ index: Int, anchorPosition: Int, deferred: Bool) {
         let table = db.patternTable
         let base = index * AVDatabaseFormat.patternRecordSize
-        // Most candidates are rejected by their anchor element (usually a literal run longer than
-        // the 4-byte anchor), so test it before any bookkeeping.
-        guard let programOffset = table.u32le(base + 4), let programLength = table.u32le(base + 8),
-              let anchorElement = table.u16le(base + 12), let anchorDelta = table.u16le(base + 14),
-              let programBytes = db.programs.slice(Int(programOffset), Int(programLength)),
-              let program = AVProgramView(programBytes), let elementOffset = program.elementOffset(Int(anchorElement)) else { return }
+        guard let signatureValue = table.u32le(base), let anchorDelta = table.u16le(base + 14),
+              let subsigByte = table.u8(base + 16), let offsetKind = table.u8(base + 18) else { return }
         let runStart = anchorPosition - Int(anchorDelta)
-        guard runStart >= 0, AVPatternMatcher(data).matchSimple(program, elementOffset, at: runStart) != nil else { return }
+        guard runStart >= 0 else { return }
+        // Nothing to find: a subsignature with every match it needs, a ruled-out signature, a
+        // deferred subsignature of a signature that isn't alive, a body signature already found.
+        if subsigByte != 0xFF {
+            if let slot = stateSignatures.isEmpty ? nil : stateSlot(Int(signatureValue)) {
+                if isSaturated(slot, Int(subsigByte)) { return }
+            } else if deferred || (!ruledOut.isEmpty && ruledOut.find(Int(signatureValue)) != nil) {
+                return
+            }
+        } else if !bodyMatches.isEmpty, bodyMatches.contains(Int(signatureValue)) {
+            return
+        }
+        // A pattern at a fixed offset: its anchor must be where that offset allows.
+        if offsetKind != AVOffsetSpec.Kind.any.rawValue, !anchorFitsOffset(table, base, kind: offsetKind, runStart: runStart) {
+            return
+        }
+        // The anchor element (usually a literal run longer than the 4-byte anchor), before any bookkeeping.
+        guard let programOffset = table.u32le(base + 4), let programLength = table.u32le(base + 8),
+              let anchorElement = table.u16le(base + 12),
+              let programBytes = db.programs.slice(Int(programOffset), Int(programLength)),
+              let program = AVProgramView(programBytes), let elementOffset = program.elementOffset(Int(anchorElement)),
+              AVPatternMatcher(data).matchSimple(program, elementOffset, at: runStart) != nil else { return }
 
-        guard let signature = table.u32le(base).map(Int.init), let subsigByte = table.u8(base + 16) else { return }
         let subsig: Int? = subsigByte == 0xFF ? nil : Int(subsigByte)
-        guard shouldCheck(signature: signature, subsig: subsig, deferred: deferred), let pattern = db.pattern(index),
+        guard shouldCheck(signature: Int(signatureValue), subsig: subsig, deferred: deferred), let pattern = db.pattern(index),
               let match = verify(pattern, index: index, anchorPosition: anchorPosition) else { return }
         record(pattern, start: match)
+    }
+
+    /// For a pattern at a fixed offset (pattern record at `base`): can its anchor element start
+    /// at `runStart`, given the window its offset allows and the stored range of distances
+    /// between the pattern's start and that element?
+    @inline(__always)
+    private func anchorFitsOffset(_ table: AVByteView, _ base: Int, kind: UInt8, runStart: Int) -> Bool {
+        guard let kind = AVOffsetSpec.Kind(rawValue: kind), let value = table.u32le(base + 20), let maxShift = table.u32le(base + 24),
+              let section = table.u16le(base + 28), let minPrefix = table.u16le(base + 36), let maxPrefix = table.u16le(base + 38) else { return false }
+        let offset = AVOffsetSpec(kind: kind, value: Int(Int32(bitPattern: value)), section: Int(section), maxShift: Int(maxShift))
+        guard let window = startWindow(offset), runStart >= window.lowerBound + Int(minPrefix) else { return false }
+        return maxPrefix == 0xFFFF || runStart <= window.upperBound + Int(maxPrefix)
     }
 
     // MARK: Verification
@@ -336,12 +715,8 @@ final class AVBufferPass {
         matcher.memo = gapMemo
         matcher.memoBase = UInt64(index) << 16
         if pattern.offset.isAnchored {
-            // The start is pinned by the offset: rule out impossible starts before any forward search.
-            if let (minPrefix, maxPrefix) = matcher.prefixLengthBounds(pattern.program, before: anchorElement) {
-                let latestStart = runStart - minPrefix
-                let earliestStart = maxPrefix == Int.max ? 0 : runStart - maxPrefix
-                guard latestStart >= window.lowerBound, earliestStart <= window.upperBound else { return nil }
-            }
+            // The start is pinned by the offset (checkCandidate already ruled out anchor
+            // positions the offset can't reach): match backward first, within the window.
             guard let start = matcher.backward(pattern.program, before: anchorElement, endingAt: runStart, startWindow: window,
                                                acceptStart: { window.contains($0) && self.leftSideAccepts(pattern, $0) }) else { return nil }
             guard matcher.forward(pattern.program, from: anchorElement + 1, at: runStart + runLength,
@@ -456,6 +831,9 @@ final class AVBufferPass {
         }
         guard let slot, subsig < stateList[slot].counts.count else { return }
         stateList[slot].counts[subsig] += 1
+        if stateList[slot].counts[subsig] >= stateList[slot].needed[subsig] {
+            saturated[slot] |= 1 &<< UInt64(truncatingIfNeeded: subsig & 63)
+        }
         if stateList[slot].positions[subsig].count < Self.maxRecordedPositions,
            db.subsig(stateList[slot].firstSubsig + subsig)?.needsPositions == true {
             stateList[slot].positions[subsig].append(start)

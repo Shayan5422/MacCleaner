@@ -80,19 +80,27 @@ enum AVFileTyper {
             default: break
             }
         }
-        if d.matches(Array("PK00PK".utf8) + [3, 4], at: 0) { return .zip }
-        if d.matches(Array("%PDF-".utf8), at: 0) { return .pdf }
-        if d.matches(Array("FWS".utf8), at: 0) || d.matches(Array("CWS".utf8), at: 0) || d.matches(Array("ZWS".utf8), at: 0) { return .swf }
-        if d.matches(Array("GIF".utf8), at: 0) || d.matches([0xFF, 0xD8, 0xFF], at: 0) || d.matches(Array("BM".utf8), at: 0)
-            || d.matches(Array("MM".utf8), at: 0) {
-            return .graphics
-        }
-        if d.matches(Array("{\\rt".utf8), at: 0) { return .rtf }
-        if d.matches(Array("ustar".utf8), at: 257) { return .posixTar }
+        if d.matches(Magic.spannedZip, at: 0) { return .zip }
+        if d.matches(Magic.pdf, at: 0) { return .pdf }
+        for prefix in Magic.swf where d.matches(prefix, at: 0) { return .swf }
+        for prefix in Magic.graphics where d.matches(prefix, at: 0) { return .graphics }
+        if d.matches(Magic.rtf, at: 0) { return .rtf }
+        if d.matches(Magic.ustar, at: 257) { return .posixTar }
         if d.count >= 512, AVTarReader.looksLikeTar(d) { return .oldTar }
         for prefix in mailPrefixes where d.matches(prefix, at: 0) { return .mail }
-        if d.matches(Array("<%@ LANGUAGE =".utf8), at: 0) { return .html }
+        if d.matches(Magic.asp, at: 0) { return .html }
         return nil
+    }
+
+    /// Magic byte strings, built once (this runs for every scanned object).
+    private enum Magic {
+        static let spannedZip = Array("PK00PK".utf8) + [3, 4]
+        static let pdf = Array("%PDF-".utf8)
+        static let swf = ["FWS", "CWS", "ZWS"].map { Array($0.utf8) }
+        static let graphics: [[UInt8]] = [Array("GIF".utf8), [0xFF, 0xD8, 0xFF], Array("BM".utf8), Array("MM".utf8)]
+        static let rtf = Array("{\\rt".utf8)
+        static let ustar = Array("ustar".utf8)
+        static let asp = Array("<%@ LANGUAGE =".utf8)
     }
 
     // MARK: Text
@@ -139,9 +147,21 @@ enum AVFileTyper {
 
     // MARK: HTML and mail markers
 
-    private static let htmlTags = ["html>", "head>"]
-    private static let htmlOpenTags = ["script", "iframe", "img", "object", "table"]
-    private static let tagDelimiters: Set<UInt8> = [0x3E, 0x20, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x2F]
+    /// Each marker in lowercase, uppercase and capitalized form.
+    private static let htmlTagForms = caseForms(["html>", "head>"])
+    private static let htmlOpenTagForms = caseForms(["script", "iframe", "img", "object", "table"])
+
+    private static func caseForms(_ words: [String]) -> [[UInt8]] {
+        words.flatMap { word in
+            [Array(word.utf8), Array(word.uppercased().utf8), Array((word.prefix(1).uppercased() + word.dropFirst()).utf8)]
+        }
+    }
+
+    /// `>`, whitespace or `/` after an opening tag name.
+    @inline(__always)
+    private static func isTagDelimiter(_ c: UInt8) -> Bool {
+        c == 0x3E || c == 0x20 || c == 0x2F || (c >= 0x09 && c <= 0x0D)
+    }
 
     /// ClamAV's HTML markers (`daily.ftm`): `<html>`, `<head>`, `<script`, `<iframe`, `<img`,
     /// `<object`, `<table` (followed by `>`, whitespace or `/`) and `<a ` … `href`, each written in
@@ -152,24 +172,15 @@ enum AVFileTyper {
         while position < window.count, let found = memchr(base + position, 0x3C, window.count - position) {
             let index = UnsafeRawPointer(found) - base
             position = index + 1
-            for tag in htmlTags where matchesCaseForms(window, index + 1, tag) { return true }
-            for tag in htmlOpenTags where matchesCaseForms(window, index + 1, tag) {
-                if let next = window.u8(index + 1 + tag.utf8.count), tagDelimiters.contains(next) { return true }
+            for form in htmlTagForms where window.matches(form, at: index + 1) { return true }
+            for form in htmlOpenTagForms where window.matches(form, at: index + 1) {
+                if let next = window.u8(index + 1 + form.count), isTagDelimiter(next) { return true }
             }
             if let a = window.u8(index + 1), a == 0x61 || a == 0x41, window.u8(index + 2) == 0x20 {
                 if hasHref(window, from: index + 3) { return true }
             }
         }
         return false
-    }
-
-    private static func matchesCaseForms(_ window: AVByteView, _ offset: Int, _ word: String) -> Bool {
-        let lower = Array(word.utf8)
-        if window.matches(lower, at: offset) { return true }
-        let upper = Array(word.uppercased().utf8)
-        if window.matches(upper, at: offset) { return true }
-        let capitalized = Array((word.prefix(1).uppercased() + word.dropFirst()).utf8)
-        return window.matches(capitalized, at: offset)
     }
 
     /// `(h|H)(r|R)(EF|ef)` anywhere after `<a `.
@@ -189,13 +200,31 @@ enum AVFileTyper {
     /// The multi-line mail markers of `daily.ftm` (a `From:`/`Received:`/`MIME-Version:` header line
     /// followed by `Content-Type:` or `MIME-Version:` within the first 2 KiB).
     private static func looksLikeMail(_ data: AVByteView) -> Bool {
-        guard let window = data.slice(0, min(data.count, 3072)) else { return false }
-        func find(_ text: String) -> Int? {
-            window.firstIndex(of: Array(text.utf8)) ?? window.firstIndex(of: Array(text.lowercased().utf8))
+        guard let window = data.slice(0, min(data.count, 3072)), let base = window.base,
+              memchr(base, 0x3A, window.count) != nil else { return false } // every marker has a colon
+        // Every marker starts with a line feed: one pass over the line starts records where each
+        // form of each marker first occurs.
+        let markers = mailStarters + mailFollowers
+        var exact = [Int?](repeating: nil, count: markers.count)
+        var lower = [Int?](repeating: nil, count: markers.count)
+        var position = 0
+        while position < window.count, let found = memchr(base + position, 0x0A, window.count - position) {
+            let index = UnsafeRawPointer(found) - base
+            position = index + 1
+            for (k, marker) in markers.enumerated() {
+                if exact[k] == nil, window.matches(marker.exact, at: index) { exact[k] = index }
+                if lower[k] == nil, window.matches(marker.lower, at: index) { lower[k] = index }
+            }
         }
-        let starters = ["\nFrom: ", "\nMIME-Version: ", "\nReceived: ", "\nMessage-Id: "]
-        guard let start = starters.compactMap(find).min(), start <= 1024 else { return false }
-        let followers = ["\nContent-Type: ", "\nMIME-Version: "]
-        return followers.compactMap(find).contains { $0 > start }
+        func first(_ k: Int) -> Int? { exact[k] ?? lower[k] }
+        guard let start = (0..<mailStarters.count).compactMap(first).min(), start <= 1024 else { return false }
+        return (mailStarters.count..<markers.count).compactMap(first).contains { $0 > start }
+    }
+
+    private static let mailStarters = ["\nFrom: ", "\nMIME-Version: ", "\nReceived: ", "\nMessage-Id: "].map(markerForms)
+    private static let mailFollowers = ["\nContent-Type: ", "\nMIME-Version: "].map(markerForms)
+
+    private static func markerForms(_ text: String) -> (exact: [UInt8], lower: [UInt8]) {
+        (Array(text.utf8), Array(text.lowercased().utf8))
     }
 }

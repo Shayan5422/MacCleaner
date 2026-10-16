@@ -256,4 +256,28 @@ struct AVLogicalSignatureTests {
         #expect(try detects(sig, all))
         #expect(try !detects(sig, binary([(100, parts[1]), (400, parts[2]), (800, parts[0]), (1500, parts[3])])))
     }
+
+    /// A deferred subsignature without a 4-byte anchor (3 case-insensitive letters) is found by
+    /// the shared 2-byte-keyed pass, in any letter case.
+    @Test func shortCaseInsensitiveDeferredSubsignature() throws {
+        let sig = "Test.ShortDeferred-1;Engine:51-255,Target:0;0&1;\(h("zq8!trigger#rare"));\(h("pxa"))::i"
+        for form in ["pxa", "PXA", "pXa"] {
+            #expect(try detects(sig, binary([(100, "zq8!trigger#rare"), (6000, form)])), "\(form)")
+        }
+        #expect(try !detects(sig, binary([(100, "zq8!trigger#rare"), (6000, "pxb")])))
+        #expect(try !detects(sig, binary([(6000, "pxa")])))
+    }
+
+    /// A signature restricted to a container is ruled out by its first hit elsewhere, and still
+    /// matches inside that container however often its trigger occurs.
+    @Test func containerRuleWithRepeatedTrigger() throws {
+        let sig = "Test.ZipOnly-2;Engine:51-255,Container:CL_TYPE_ZIP,Target:0;0&1;\(h("torch"));\(h("zq8-second-part"))"
+        var parts = [(Int, String)]()
+        for offset in stride(from: 100, to: 7000, by: 64) { parts.append((offset, "torch")) }
+        parts.append((7500, "zq8-second-part"))
+        let member = binary(parts)
+        #expect(try !detects(sig, member))
+        let zip = AVFixtures.zip([AVFixtures.ZipMember(name: "model/data.pkl", data: member, deflate: false)])
+        #expect(try detects(sig, zip))
+    }
 }

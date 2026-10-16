@@ -159,6 +159,58 @@ struct AVBodySignatureTests {
         #expect(detections.first?.memberPath == "x86_64")
     }
 
+    // MARK: Anchors on common bytes
+
+    /// Patterns whose only 4-byte window is zeros: the bytes around it decide, inside zero
+    /// padding and fill as well as in random data.
+    @Test func patternsAnchoredOnZeroRuns() throws {
+        let pattern = "68????????ff25{4}0000000000{4}00000000"
+        let match = hex("6801020304ff25") + [9, 9, 9, 9] + [0, 0, 0, 0, 0] + [7, 7, 7, 7] + [0, 0, 0, 0]
+        for fill: UInt8 in [0x00, 0xCC] {
+            var data = Data([0, 1]) + Data(repeating: fill, count: 70_000)
+            data.replaceSubrange(30_000..<(30_000 + match.count), with: match)
+            #expect(try matches(pattern, data), "fill \(fill)")
+            // The same bytes without the leading push: no match anywhere in the run.
+            var near = Data([0, 1]) + Data(repeating: fill, count: 70_000)
+            near.replaceSubrange(30_000..<(30_000 + match.count - 1), with: match.dropFirst())
+            #expect(try !matches(pattern, near), "fill \(fill)")
+        }
+        // At the very end of a long zero run and at the start of the buffer.
+        var edge = Data([0, 1]) + Data(count: 5000)
+        edge.replaceSubrange(2..<(2 + match.count), with: match)
+        #expect(try matches(pattern, edge))
+        #expect(try matches(pattern, Data([0, 1]) + Data(count: 5000) + Data(match)))
+    }
+
+    /// Entry-point patterns anchored on zeros only match at the entry point, not in the zero
+    /// padding that every executable has.
+    @Test func entryPointPatternsAnchoredOnZeros() throws {
+        let code = Data(hex("60e8000000005d81ed") + [UInt8](repeating: 0, count: 600) + hex("e8000000005d"))
+        let pe = AVFixtures.pe(sections: [(".text", code)], entryOffsetInFirstSection: 0)
+        #expect(try matches("60e8000000005d", offset: "EP+0", target: 1, pe))
+        #expect(try matches("e8000000005d", offset: "EP+1", target: 1, pe))
+        #expect(try !matches("e8000000005d", offset: "EP+0", target: 1, pe))
+        #expect(try matches("0000000000000000", offset: "EP+12,4", target: 1, pe))
+        #expect(try !matches("e8000000005d", offset: "EP+700", target: 1, pe))
+    }
+
+    /// Floating patterns whose exact runs are 2–3 bytes long go through the 2-byte-keyed table.
+    @Test func patternsWithOnlyShortExactRuns() throws {
+        let pattern = "558bec??????e8{2}c3"
+        let match = hex("558bec112233e84455c3")
+        var data = buffer(65_536)
+        // Many near misses (the prologue alone) and one real match.
+        for offset in stride(from: 1000, to: 60_000, by: 997) { data.replaceSubrange(offset..<(offset + 3), with: hex("558bec")) }
+        #expect(try !matches(pattern, data))
+        data.replaceSubrange(61_000..<(61_000 + match.count), with: match)
+        #expect(try matches(pattern, data))
+        // In a zero run, keyed on "00 00".
+        var zeros = Data([0, 1]) + Data(count: 20_000)
+        zeros.replaceSubrange(10_000..<10_006, with: hex("0000c3c30000"))
+        #expect(try matches("0000c3??0000", zeros))
+        #expect(try !matches("0000c4??0000", zeros))
+    }
+
     // MARK: Functionality levels
 
     @Test func functionalityLevelsGateSignatures() throws {

@@ -224,22 +224,36 @@ enum AVFind {
 }
 
 /// A growable byte buffer for large, short-lived data (file contents, decompressed members,
-/// normalized text). Backed by an anonymous mapping that reserves `capacity` bytes of address
-/// space (pages are only committed when written) and is unmapped when released, so big scans
-/// don't leave freed memory cached in malloc's large-allocation pool.
+/// normalized text). Large buffers are anonymous mappings that reserve `capacity` bytes of
+/// address space (pages are only committed when written) and are unmapped when released, so big
+/// scans don't leave freed memory cached in malloc's large-allocation pool; small ones (most
+/// files) come from malloc, which is cheaper than a mapping per buffer.
 final class AVScratchBuffer {
     let base: UnsafeMutableRawPointer
     let capacity: Int
     private(set) var count = 0
+    private let mapped: Bool
+
+    /// Buffers up to this size come from malloc.
+    static let heapLimit = 256 * 1024
 
     init?(capacity: Int) {
         let size = max(capacity, 1)
-        guard let address = mmap(nil, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0), address != MAP_FAILED else { return nil }
-        base = address
+        if size <= Self.heapLimit {
+            guard let address = malloc(size) else { return nil }
+            base = address
+            mapped = false
+        } else {
+            guard let address = mmap(nil, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0), address != MAP_FAILED else { return nil }
+            base = address
+            mapped = true
+        }
         self.capacity = size
     }
 
-    deinit { munmap(base, capacity) }
+    deinit {
+        if mapped { munmap(base, capacity) } else { free(base) }
+    }
 
     var view: AVByteView { AVByteView(base: UnsafeRawPointer(base), count: count) }
 

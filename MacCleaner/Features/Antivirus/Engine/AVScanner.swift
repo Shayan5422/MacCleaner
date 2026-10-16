@@ -108,7 +108,12 @@ final class AVObjectScanner {
         if kind.isExecutable { exe = AVExecutableInfo.parse(data, kind: kind) }
 
         if let db = core.database {
-            checkFileHashes(data, machO: kind == .machO || kind == .machOUniversal, digests: &digests, db: db, report: report)
+            // Slices of a universal binary aren't looked up in the size-less SHA-256 lists:
+            // those list whole samples, and hashing every slice again doubles the hashing of
+            // most Mac executables. ClamAV's own hash signatures (with sizes) still apply.
+            let slice = level.containers.last == .machOUniversal
+            checkFileHashes(data, machO: kind == .machO || kind == .machOUniversal, sizelessLists: !slice,
+                            digests: &digests, db: db, report: report)
             if kind == .pe, let exe, exe.isPE32, options.detectNonMacThreats {
                 checkSectionHashes(data, exe: exe, db: db, report: report)
             }
@@ -139,12 +144,13 @@ final class AVObjectScanner {
     /// (or any size). Wildcard-size signatures named for platforms whose files can't be Mach-O
     /// (`Win.`, `Html.`...) aren't checked against Mach-O files, which saves an MD5 of every
     /// executable (all such signatures in ClamAV's current database are Windows/HTML exploits).
-    private func checkFileHashes(_ data: AVByteView, machO: Bool, digests: inout AVObjectDigests, db: AVMappedDatabase,
-                                 report: (String, AVThreatKind, AVSignatureSource) -> Void) {
+    private func checkFileHashes(_ data: AVByteView, machO: Bool, sizelessLists: Bool, digests: inout AVObjectDigests,
+                                 db: AVMappedDatabase, report: (String, AVThreatKind, AVSignatureSource) -> Void) {
         let size = data.count
+        let useLists = sizelessLists && core.hasHashList
         let wantMD5 = (machO ? core.md5WildcardMachO : core.md5Wildcard) || db.containsSize(core.md5Sizes, size)
         let wantSHA1 = (machO ? core.sha1WildcardMachO : core.sha1Wildcard) || db.containsSize(core.sha1Sizes, size)
-        let wantSHA256 = core.hasHashList || (machO ? core.sha256WildcardMachO : core.sha256Wildcard) || db.containsSize(core.sha256Sizes, size)
+        let wantSHA256 = useLists || (machO ? core.sha256WildcardMachO : core.sha256Wildcard) || db.containsSize(core.sha256Sizes, size)
         guard wantMD5 || wantSHA1 || wantSHA256 else { return }
         digests.ensure(md5: wantMD5, sha1: wantSHA1, sha256: wantSHA256)
         let tables: [([UInt8]?, AVByteView)] = [(wantMD5 ? digests.md5 : nil, core.md5Table),
@@ -156,7 +162,7 @@ final class AVObjectScanner {
                 reportHashSignature(reference, db: db, report: report)
             }
         }
-        if core.hasHashList, let sha256 = digests.sha256 {
+        if useLists, let sha256 = digests.sha256 {
             for source in db.hashListSources(sha256) {
                 report("\(Self.sourceComponent(source)).KnownMalware", .malware, source)
             }
@@ -371,6 +377,8 @@ final class AVEngineCore: @unchecked Sendable {
     let md5WildcardMachO: Bool, sha1WildcardMachO: Bool, sha256WildcardMachO: Bool
     let sectionMD5Wildcard: Bool, sectionSHA1Wildcard: Bool, sectionSHA256Wildcard: Bool
     let hasHashList: Bool
+    /// Per target: the anchored-list patterns, indexed (see `AVAnchoredIndex`).
+    let anchoredIndex: [AVAnchoredIndex]
 
     init(database: AVMappedDatabase?) {
         self.database = database
@@ -403,5 +411,44 @@ final class AVEngineCore: @unchecked Sendable {
         sectionSHA1Wildcard = metadata?.sectionSHA1Wildcard ?? false
         sectionSHA256Wildcard = metadata?.sectionSHA256Wildcard ?? false
         hasHashList = !section(AVDatabaseFormat.hashList).isEmpty
+        anchoredIndex = (0..<AVDatabaseFormat.targetCount).map { target in
+            database.map { AVAnchoredIndex(database: $0, list: $0.anchoredLists[target]) } ?? AVAnchoredIndex()
+        }
+    }
+}
+
+/// The patterns checked at their fixed offset (no prefilter anchor), built at load: those at
+/// an absolute offset that start with two exact bytes are keyed by (offset, those bytes), so a
+/// file costs one lookup per distinct offset instead of one try per pattern (a family of
+/// signatures may contribute hundreds of `0:8002`-style alternatives).
+struct AVAnchoredIndex: Sendable {
+    /// `offset << 16 | first two bytes (little-endian)` → pattern indices.
+    var keyed: [UInt64: [Int32]] = [:]
+    /// The distinct offsets in `keyed`, ascending.
+    var offsets: [Int] = []
+    /// Every other pattern of the list.
+    var others: [Int32] = []
+
+    init() {}
+
+    init(database: AVMappedDatabase, list: AVByteView) {
+        guard let count = list.u32le(0).map(Int.init) else { return }
+        var offsetSet = Set<Int>()
+        for k in 0..<count {
+            guard let value = list.u32le(4 + k * 4) else { break }
+            let index = Int(value)
+            guard let pattern = database.pattern(index), pattern.offset.kind == .absolute, pattern.offset.maxShift == 0,
+                  pattern.offset.value >= 0, pattern.offset.value < 1 << 40,
+                  let first = pattern.program.elementOffset(0), pattern.program.bytes.u8(first) == AVProgramOp.literal.rawValue,
+                  let length = pattern.program.bytes.u16le(first + 1), length >= 2,
+                  let b0 = pattern.program.bytes.u8(first + 3), let b1 = pattern.program.bytes.u8(first + 4) else {
+                others.append(Int32(truncatingIfNeeded: index))
+                continue
+            }
+            let key = UInt64(pattern.offset.value) << 16 | UInt64(b0) | UInt64(b1) << 8
+            keyed[key, default: []].append(Int32(truncatingIfNeeded: index))
+            offsetSet.insert(pattern.offset.value)
+        }
+        offsets = offsetSet.sorted()
     }
 }

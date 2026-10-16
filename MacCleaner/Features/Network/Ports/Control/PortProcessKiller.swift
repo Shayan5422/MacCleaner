@@ -290,13 +290,15 @@ final class PortProcessKiller: Sendable {
         return literal
     }
 
-    /// `/bin/sh` command that signals each pid only if its start time (as printed by `ps -o lstart=`, 1 s
-    /// resolution) still matches the identity we planned for. nil when no target can be guarded.
+    /// `/bin/sh` command that signals each pid only if its owner and start time (as printed by
+    /// `ps -o lstart=`, 1 s resolution) still match the identity we planned for: a pid reused within
+    /// the same second by another user's process is left alone. nil when no target can be guarded.
     static func adminKillCommand(signalName: String, targets: [PortProcessBasic]) -> String? {
         let guarded = targets.compactMap { target -> String? in
             guard target.pid > 1, let started = psStartString(forMicroseconds: target.startTime) else { return nil }
             // `echo $(…)` collapses ps' padding to single spaces, matching `started`.
-            return "[ \"$(echo $(LC_ALL=C /bin/ps -o lstart= -p \(target.pid)))\" = '\(started)' ] && /bin/kill -\(signalName) \(target.pid)"
+            return "[ \"$(echo $(/bin/ps -o uid= -p \(target.pid)))\" = '\(target.uid)' ] && "
+                + "[ \"$(echo $(LC_ALL=C /bin/ps -o lstart= -p \(target.pid)))\" = '\(started)' ] && /bin/kill -\(signalName) \(target.pid)"
         }
         guard !guarded.isEmpty else { return nil }
         return (guarded + ["exit 0"]).joined(separator: "; ")

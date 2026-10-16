@@ -69,6 +69,10 @@ enum AVAutoQuarantine {
     /// break software, so the person decides), and only as the settings allow.
     static func applies(to threat: AVThreat, settings: AVSettingsSnapshot) -> Bool {
         guard !threat.detections.isEmpty, threat.enclosingApp == nil, !threat.isAppBundle else { return false }
+        // Only detections backed by signed definitions (ClamAV's RSA-signed databases, or the built-in
+        // EICAR test) act on their own. abuse.ch's hash lists aren't signed, so a tampered list must not
+        // be able to move legitimate files: their matches wait for the person.
+        guard threat.detections.contains(where: { $0.source == .clamav || $0.source == .builtIn }) else { return false }
         switch threat.category {
         case .malware, .testFile: return settings.autoQuarantineMalware
         case .pua: return settings.puaAction == .quarantine

@@ -770,7 +770,7 @@ private func pids(_ processes: [PortProcessBasic]) -> [Int32] { processes.map(\.
         let target = PortProcessBasic(pid: 4321, ppid: 1, pgid: 4321, uid: rootUID, comm: "nginx", startTime: start)
         let command = try #require(PortProcessKiller.adminKillCommand(signalName: "TERM", targets: [target]))
         let expected = try #require(PortProcessKiller.psStartString(forMicroseconds: start))
-        #expect(command == "[ \"$(echo $(LC_ALL=C /bin/ps -o lstart= -p 4321))\" = '\(expected)' ] && /bin/kill -TERM 4321; exit 0")
+        #expect(command == "[ \"$(echo $(/bin/ps -o uid= -p 4321))\" = '\(rootUID)' ] && [ \"$(echo $(LC_ALL=C /bin/ps -o lstart= -p 4321))\" = '\(expected)' ] && /bin/kill -TERM 4321; exit 0")
         #expect(!(expected.contains("  ")))
         #expect(PortProcessKiller.adminKillCommand(signalName: "KILL", targets: [
             PortProcessBasic(pid: 1, ppid: 0, pgid: 1, uid: 0, comm: "launchd", startTime: start),

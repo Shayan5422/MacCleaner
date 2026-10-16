@@ -92,8 +92,21 @@ actor AVVirusChest {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: paths.quarantine.path)) ?? []
         return names.filter { $0.hasSuffix(".json") }
             .compactMap { AVJSONFile.load(AVChestItem.self, from: paths.quarantine.appendingPathComponent($0)) }
-            .filter { FileManager.default.fileExists(atPath: payloadURL($0.id).path) }
+            .filter { Self.isWellFormed($0) && FileManager.default.fileExists(atPath: payloadURL($0.id).path) }
             .sorted { $0.quarantinedAt > $1.quarantinedAt }
+    }
+
+    /// Records the chest wrote itself: a UUID id, a plain file name and an absolute original path.
+    /// Anything else (a tampered record naming "../" paths) is ignored, so restoring or deleting
+    /// can't act outside the chest or the chosen folder.
+    static func isWellFormed(_ item: AVChestItem) -> Bool {
+        guard UUID(uuidString: item.id) != nil else { return false }
+        func isPlainName(_ name: String) -> Bool {
+            !name.isEmpty && !name.contains("/") && name != "." && name != ".." && !name.hasPrefix("..")
+        }
+        guard isPlainName(item.name), item.originalPath.hasPrefix("/"), !item.originalPath.contains("/../"),
+              !item.originalPath.hasSuffix("/..") else { return false }
+        return (item.originalPath as NSString).lastPathComponent == item.name
     }
 
     private func payloadURL(_ id: String) -> URL { paths.quarantine.appendingPathComponent(id + ".mcchest") }

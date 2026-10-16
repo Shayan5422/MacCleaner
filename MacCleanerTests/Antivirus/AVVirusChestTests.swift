@@ -207,3 +207,54 @@ struct AVVirusChestTests {
         #expect(rule.category == .pua)
     }
 }
+
+@Suite("Review hardening")
+struct AVReviewHardeningTests {
+    /// abuse.ch's hash lists aren't signed: their matches never move files on their own.
+    @Test func unsignedHashListMatchesWaitForThePerson() {
+        let settings = AVSettingsSnapshot()
+        let bazaarOnly = AVThreat(path: "/Users/me/Downloads/tool", detections: [
+            AVDetection(signatureName: "MalwareBazaar.KnownMalware", kind: .malware, source: .malwareBazaar, memberPath: nil),
+        ])
+        let threatFoxOnly = AVThreat(path: "/Users/me/Downloads/tool2", detections: [
+            AVDetection(signatureName: "ThreatFox.KnownMalware", kind: .malware, source: .threatFox, memberPath: nil),
+        ])
+        let alsoClamAV = AVThreat(path: "/Users/me/Downloads/tool3", detections: [
+            AVDetection(signatureName: "MalwareBazaar.KnownMalware", kind: .malware, source: .malwareBazaar, memberPath: nil),
+            AVDetection(signatureName: "Osx.Trojan.X", kind: .malware, source: .clamav, memberPath: nil),
+        ])
+        #expect(!AVAutoQuarantine.applies(to: bazaarOnly, settings: settings))
+        #expect(!AVAutoQuarantine.applies(to: threatFoxOnly, settings: settings))
+        #expect(AVAutoQuarantine.applies(to: alsoClamAV, settings: settings))
+    }
+
+    /// A tampered record (an id or name with "../") is ignored, so restore and delete can't act outside the chest.
+    @Test func tamperedChestRecordsAreIgnored() async throws {
+        let directory = try AVTestFolder("AVChestTamper")
+        let home = directory.child("home").path
+        try FileManager.default.createDirectory(atPath: home, withIntermediateDirectories: true)
+        let policy = AVQuarantinePolicy(home: home, ownBundlePath: "/Applications/Mac Cleaner.app",
+                                        ownDataDirectory: home + "/Library/Application Support/Mac Cleaner")
+        let chest = AVVirusChest(paths: directory.paths, policy: policy, logger: ActivityLogger(directory: directory.child("logs")))
+        let path = try directory.makeFile("home/Downloads/sample.bin", contents: AVFakeScanner.malwareMarker)
+        let item = try await chest.quarantine(AVQuarantineRequest(
+            path: path, expected: FileSnapshot.capture(path: path), signatureName: "Osx.Test.FakeMalware", category: .malware,
+            sha256: AVFileHasher.sha256(path: path), source: .scan))
+        #expect(AVVirusChest.isWellFormed(item))
+        var traversal = item
+        traversal.id = "../../escape"
+        #expect(!AVVirusChest.isWellFormed(traversal))
+        var badName = item
+        badName.name = "../x"
+        #expect(!AVVirusChest.isWellFormed(badName))
+        var badPath = item
+        badPath.originalPath = "/Users/me/../../etc/sample.bin"
+        #expect(!AVVirusChest.isWellFormed(badPath))
+
+        let metadata = directory.paths.quarantine.appendingPathComponent(item.id + ".json")
+        var json = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: metadata)) as? [String: Any])
+        json["name"] = "../../evil"
+        try JSONSerialization.data(withJSONObject: json).write(to: metadata)
+        #expect(await chest.items().isEmpty)
+    }
+}

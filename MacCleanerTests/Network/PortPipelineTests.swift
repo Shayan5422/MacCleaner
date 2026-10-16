@@ -488,6 +488,15 @@ final class PortPipelineSandbox: @unchecked Sendable {
         return path
     }
 
+    /// Where the processes started here write their output, so a failure can say why a server didn't start.
+    var outputLog: String { container + "/spawned-output.log" }
+
+    /// The end of `outputLog`, for failure messages.
+    func outputTail() -> String {
+        guard let text = try? String(contentsOfFile: outputLog, encoding: .utf8), !text.isEmpty else { return " (no output)" }
+        return "; output: " + String(text.suffix(800))
+    }
+
     /// `python3 -m http.server <port>` on 127.0.0.1 with `directory` as its working directory.
     @discardableResult
     func startServer(in directory: String, port: UInt16) throws -> pid_t {
@@ -501,7 +510,7 @@ final class PortPipelineSandbox: @unchecked Sendable {
     func startServerWithWorker(in directory: String, port: UInt16) throws -> pid_t {
         guard let python = Self.python else { throw PortTestError("python3 is not installed") }
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/make") else { throw PortTestError("make is not installed") }
-        let makefile = "serve:\n\t\(python) -m http.server \(port) --bind 127.0.0.1 >/dev/null 2>&1 & "
+        let makefile = "serve:\n\t\(python) -m http.server \(port) --bind 127.0.0.1 >>\(Self.quoted(outputLog)) 2>&1 & "
             + "\(python) -c 'import time; time.sleep(600)'\n"
         try makefile.write(toFile: directory + "/Makefile", atomically: true, encoding: .utf8)
         return try spawn("/usr/bin/make", ["make", "-s", "-C", directory, "serve"])
@@ -519,7 +528,7 @@ final class PortPipelineSandbox: @unchecked Sendable {
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
-        throw PortTestError("the throwaway server did not start listening on :\(port)")
+        throw PortTestError("the throwaway server did not start listening on :\(port)" + outputTail())
     }
 
     /// A running process started here whose command line contains `text`.
@@ -666,8 +675,8 @@ final class PortPipelineSandbox: @unchecked Sendable {
             }
         }
         posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0)
-        posix_spawn_file_actions_addopen(&actions, 1, "/dev/null", O_WRONLY, 0)
-        posix_spawn_file_actions_addopen(&actions, 2, "/dev/null", O_WRONLY, 0)
+        posix_spawn_file_actions_addopen(&actions, 1, outputLog, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        posix_spawn_file_actions_adddup2(&actions, 1, 2)
         let argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
         let envp: [UnsafeMutablePointer<CChar>?]? = environment.map { $0.map { strdup($0) } + [nil] }
         defer {

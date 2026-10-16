@@ -200,10 +200,12 @@ final class PortThrowawayServerTree {
         directory = subpath.map { container + "/" + $0 } ?? container
         try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
         let folder = URL(fileURLWithPath: directory, isDirectory: true)
-        let makefile = "serve:\n\twhile true; do \(python) -m http.server \(port) --bind 127.0.0.1 >/dev/null 2>&1; "
+        // The tree's output goes to a log file, so a failure can say why the server didn't start.
+        let log = container + "/server-output.log"
+        let makefile = "serve:\n\twhile true; do \(python) -m http.server \(port) --bind 127.0.0.1 >>'\(log)' 2>&1; "
             + "sleep \(restartDelay); done\n"
         try makefile.write(to: folder.appendingPathComponent("Makefile"), atomically: true, encoding: .utf8)
-        makePID = try Self.spawnInOwnProcessGroup("/usr/bin/make", ["make", "-s", "-C", directory, "serve"])
+        makePID = try Self.spawnInOwnProcessGroup("/usr/bin/make", ["make", "-s", "-C", directory, "serve"], output: log)
     }
 
     deinit { kill() }
@@ -230,7 +232,8 @@ final class PortThrowawayServerTree {
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
-        throw PortTestError("the throwaway server did not start listening on :\(port)")
+        let output = (try? String(contentsOfFile: container + "/server-output.log", encoding: .utf8)).map { String($0.suffix(800)) } ?? ""
+        throw PortTestError("the throwaway server did not start listening on :\(port)" + (output.isEmpty ? " (no output)" : "; output: " + output))
     }
 
     func waitUntilGone(_ pid: pid_t, timeout: TimeInterval = 5) throws {
@@ -260,7 +263,7 @@ final class PortThrowawayServerTree {
         return UInt16(bigEndian: address.sin_port)
     }
 
-    private static func spawnInOwnProcessGroup(_ path: String, _ arguments: [String]) throws -> pid_t {
+    private static func spawnInOwnProcessGroup(_ path: String, _ arguments: [String], output: String) throws -> pid_t {
         var attributes: posix_spawnattr_t?
         posix_spawnattr_init(&attributes)
         defer { posix_spawnattr_destroy(&attributes) }
@@ -270,8 +273,8 @@ final class PortThrowawayServerTree {
         posix_spawn_file_actions_init(&actions)
         defer { posix_spawn_file_actions_destroy(&actions) }
         posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0)
-        posix_spawn_file_actions_addopen(&actions, 1, "/dev/null", O_WRONLY, 0)
-        posix_spawn_file_actions_addopen(&actions, 2, "/dev/null", O_WRONLY, 0)
+        posix_spawn_file_actions_addopen(&actions, 1, output, O_WRONLY | O_CREAT | O_APPEND, 0o644)
+        posix_spawn_file_actions_adddup2(&actions, 1, 2)
         let argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
         defer { argv.forEach { free($0) } }
         var pid: pid_t = 0

@@ -55,6 +55,10 @@ jobs:
           uname -m
 
       - name: Build and test
+        env:
+          # Also run the end-to-end tests (MacCleanerTests/EndToEnd). They create and remove test
+          # apps, launch agents and Trash items in the runner's account, which is discarded afterwards.
+          TEST_RUNNER_MACCLEANER_E2E: "1"
         run: |
           set -o pipefail
           mkdir -p build

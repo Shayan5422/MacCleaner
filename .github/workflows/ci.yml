@@ -25,7 +25,7 @@ jobs:
       REQUIRED_XCODE_MAJOR: "27"
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Select Xcode
         run: |
@@ -36,7 +36,10 @@ jobs:
             echo "DEVELOPER_DIR=/Applications/Xcode_27.app/Contents/Developer" >> "$GITHUB_ENV"
             export DEVELOPER_DIR=/Applications/Xcode_27.app/Contents/Developer
           fi
-          version="$(xcodebuild -version | head -1 | awk '{print $2}')"
+          # Read the whole output: `xcodebuild -version | head -1` makes xcodebuild
+          # crash with SIGPIPE ("Broken pipe") once head closes the pipe.
+          version_output="$(xcodebuild -version)"
+          version="$(printf '%s\n' "$version_output" | awk 'NR == 1 { print $2 }')"
           major="${version%%.*}"
           echo "Using Xcode $version (${DEVELOPER_DIR:-$(xcode-select -p)})"
           if [ "$major" -lt "$REQUIRED_XCODE_MAJOR" ]; then
@@ -95,7 +98,7 @@ jobs:
 
       - name: Upload logs and test results
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: xcodebuild-results
           path: |

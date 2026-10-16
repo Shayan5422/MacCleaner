@@ -1,35 +1,35 @@
 import SwiftUI
 
 /// The Updates page: apps grouped by whether a newer version exists, with the way to
-/// install each update, inline release notes and details in an inspector.
+/// install each update, inline release notes and details in a panel beside the list.
 struct UpdatesView: View {
     @Bindable var model: UpdatesViewModel
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        PageScroll {
-            PageHeader(section: .updates, subtitle: subtitle) {
-                UpdatesHeaderActions(model: model)
+        DetailPanelLayout(isPresented: model.isInspectorPresented) {
+            PageScroll {
+                PageHeader(section: .updates, subtitle: subtitle) {
+                    UpdatesHeaderActions(model: model)
+                }
+                UpdatesSummaryTiles(model: model)
+                UpdatesNotices(model: model)
+                if model.isChecking {
+                    ScanProgressCard(
+                        title: "Checking for updates…",
+                        message: model.checkMessage,
+                        fraction: model.checkFraction,
+                        tint: AppSection.updates.tint,
+                        onCancel: { model.cancelCheck() }
+                    )
+                }
+                UpdatesFilterBar(model: model)
+                content
             }
-            UpdatesSummaryTiles(model: model)
-            UpdatesNotices(model: model)
-            if model.isChecking {
-                ScanProgressCard(
-                    title: "Checking for updates…",
-                    message: model.checkMessage,
-                    fraction: model.checkFraction,
-                    tint: AppSection.updates.tint,
-                    onCancel: { model.cancelCheck() }
-                )
-            }
-            UpdatesFilterBar(model: model)
-            content
+        } panel: {
+            UpdatesInspector(model: model) { openMacCleanerUpdate() }
         }
         .searchable(text: $model.searchText, placement: .toolbar, prompt: "Search apps")
-        .inspector(isPresented: $model.isInspectorPresented) {
-            UpdatesInspector(model: model) { openMacCleanerUpdate() }
-                .inspectorColumnWidth(min: 300, ideal: 330, max: 420)
-        }
         .task { model.loadIfNeeded() }
         .sheet(item: $model.homebrewRun) { run in
             UpdatesHomebrewRunSheet(run: run)
@@ -112,13 +112,15 @@ private struct UpdatesHeaderActions: View {
     @Bindable var model: UpdatesViewModel
 
     var body: some View {
+        // Labels go first when the page is narrow (the details panel is open in a small window).
         ViewThatFits(in: .horizontal) {
             actions(compact: false)
             actions(compact: true)
+            actions(compact: true, iconsOnly: true)
         }
     }
 
-    private func actions(compact: Bool) -> some View {
+    private func actions(compact: Bool, iconsOnly: Bool = false) -> some View {
         HStack(spacing: 8) {
             if model.isChecking {
                 Button("Stop", role: .cancel) { model.cancelCheck() }
@@ -140,8 +142,13 @@ private struct UpdatesHeaderActions: View {
                 Button {
                     model.checkForUpdates()
                 } label: {
-                    Label("Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+                    if iconsOnly {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    } else {
+                        Label("Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+                    }
                 }
+                .accessibilityLabel("Check for Updates")
                 .buttonStyle(.borderedProminent)
                 .tint(AppSection.updates.tint)
                 .disabled(!model.hasLoaded)

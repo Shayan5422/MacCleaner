@@ -59,6 +59,8 @@ private struct UninstallerAppDetail: View {
                     .help(UninstallerAppTable.versionHelp(app))
                 UninstallerAppBadges(app: app, isRunning: model.isRunning(app))
             }
+            // The name gets the room first, so it doesn't break mid-word beside the spacer.
+            .layoutPriority(1)
             Spacer(minLength: 0)
             if let onClose {
                 Button(action: onClose) {

@@ -152,10 +152,15 @@ final class AppPresence {
         NSApp.activate()
     }
 
+    /// Window notifications can arrive while AppKit or SwiftUI is still setting the window
+    /// up, so the policy changes on the next turn of the run loop, never in the middle.
     private func windowAppeared(_ window: NSWindow?) {
         guard let window, Self.isAppWindow(window), NSApp.activationPolicy() != .regular else { return }
-        NSApp.setActivationPolicy(.regular)
-        NSApp.activate()
+        DispatchQueue.main.async {
+            guard NSApp.activationPolicy() != .regular, NSApp.windows.contains(where: Self.isAppWindow) else { return }
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate()
+        }
     }
 
     /// A closing window is still visible when the notification arrives, so check a moment later.

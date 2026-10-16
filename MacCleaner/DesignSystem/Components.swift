@@ -58,6 +58,9 @@ struct PageHeader<Trailing: View>: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title ?? section.title)
                     .font(.system(size: 24, weight: .bold, design: .rounded))
+                    // Shrinks a little in a narrow page rather than breaking mid-word.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                 Text(subtitle)
                     .font(.callout)
                     .foregroundStyle(.secondary)

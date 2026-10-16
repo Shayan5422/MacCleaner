@@ -104,6 +104,14 @@ struct RootView: View {
             SidebarView(navigation: navigation, badges: environment.sidebarBadges)
         } detail: {
             detail(for: navigation.selection)
+                // The window sets the minimum size (1000 × 660, below) and every page fits
+                // it: pages scroll, or their tables shrink. Without this, the column takes
+                // its minimum height from the page, and a page that measures taller than
+                // the window makes AppKit size the column past the window's edge; the
+                // toolbar's safe-area inset then changes with that frame and changes the
+                // minimum again, on every pass, until AppKit stops the layout loop with an
+                // exception (the crash on the Uninstaller page).
+                .frame(minHeight: 0, maxHeight: .infinity)
                 .toolbar {
                     ToolbarItem(placement: .navigation) {
                         Button {

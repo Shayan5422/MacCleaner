@@ -131,7 +131,12 @@ struct BalancedGrid: Layout {
         guard !subviews.isEmpty else { return .zero }
         let width: CGFloat
         if let proposed = proposal.width, proposed.isFinite {
-            width = proposed
+            // Cards are never laid out narrower than their minimum width. A smaller
+            // proposal, such as the zero-size probe SwiftUI uses to find a view's minimum
+            // size, gets one column of cards at that width; measuring them at the
+            // proposed width would wrap their text a character per line and report a
+            // minimum height of over a thousand points.
+            width = max(proposed, minimumItemWidth)
         } else {
             let columns = min(subviews.count, maximumColumns, 3)
             width = minimumItemWidth * CGFloat(columns) + spacing * CGFloat(columns - 1)

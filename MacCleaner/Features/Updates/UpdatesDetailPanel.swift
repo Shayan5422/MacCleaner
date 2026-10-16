@@ -9,7 +9,7 @@ enum UpdatesPasteboard {
     }
 }
 
-/// Details and actions of the inspected app, in the page's inspector.
+/// Details and actions of the inspected app, in the panel beside the list.
 struct UpdatesInspector: View {
     @Bindable var model: UpdatesViewModel
     var onUpdateMacCleaner: () -> Void
@@ -77,6 +77,8 @@ private struct UpdatesAppDetail: View {
                     }
                 }
             }
+            // The name gets the room first, so it doesn't break mid-word beside the spacer.
+            .layoutPriority(1)
             Spacer(minLength: 0)
             Button {
                 model.inspectedRowID = nil

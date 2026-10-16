@@ -143,6 +143,19 @@ enum ProcessInspector {
     // MARK: - Open files
 
     /// Paths of files and folders currently open by this user's processes.
+    /// macOS services that open files for a moment to index, preview or check them: Spotlight
+    /// importers, Quick Look thumbnails and XProtect. Their handles don't mean an app is using the
+    /// item, and they don't stop it from being moved or deleted, so they never make it "in use".
+    static let transientReaders: Set<String> = [
+        "mdworker_shared", "mdworker", "mdwrite", "corespotlightd",
+        "QuickLookUIService", "quicklookd", "XprotectService", "XProtect",
+    ]
+
+    static func isTransientReader(_ processName: String) -> Bool {
+        // Quick Look's agents have long names that `proc_name` cuts at 32 characters.
+        transientReaders.contains(processName) || processName.hasPrefix("com.apple.quicklook.")
+    }
+
     static func openFiles() -> OpenFileIndex {
         var index = OpenFileIndex()
         let me = getuid()
@@ -151,6 +164,7 @@ enum ProcessInspector {
             let size = Int32(MemoryLayout<proc_bsdinfo>.size)
             guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size, info.pbi_uid == me else { continue }
             let processName = name(of: pid, fallback: info)
+            guard !isTransientReader(processName) else { continue }
 
             let bufferSize = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
             guard bufferSize > 0 else { continue }

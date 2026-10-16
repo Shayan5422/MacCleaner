@@ -125,3 +125,17 @@ struct CoreHistoryStoreTests {
         #expect(FileManager.default.fileExists(atPath: trashed))
     }
 }
+
+@Suite("Open files")
+struct OpenFileReaderTests {
+    /// Spotlight, Quick Look and XProtect open new files for a moment; that never makes an item "in use".
+    @Test func transientSystemReadersDontCount() {
+        for name in ["mdworker_shared", "mdworker", "corespotlightd", "QuickLookUIService", "XprotectService",
+                     "com.apple.quicklook.ThumbnailsAg"] {
+            #expect(ProcessInspector.isTransientReader(name), "\(name)")
+        }
+        for name in ["Finder", "Xcode", "node", "Safari", "mds", "Preview"] {
+            #expect(!ProcessInspector.isTransientReader(name), "\(name)")
+        }
+    }
+}

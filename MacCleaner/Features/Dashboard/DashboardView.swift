@@ -130,7 +130,7 @@ struct DashboardView: View {
             Button("Monitor") { model.navigate?(.performance) }.buttonStyle(.link)
         }) {
             DashboardMetricLayout {
-                RingGauge(fraction: model.monitor.latest?.cpuUsage ?? 0, tint: AppSection.performance.tint) {
+                RingGauge(fraction: model.monitor.latest?.cpuUsage ?? 0, tint: AppSection.performance.tint, animatesChanges: false) {
                     Text(model.monitor.latest.map { NumberFormatting.percent($0.cpuUsage) } ?? "—")
                         .font(.headline.monospacedDigit())
                 }
@@ -158,7 +158,7 @@ struct DashboardView: View {
         }) {
             let fraction = model.monitor.latest.map { Double($0.memoryUsed) / Double(max($0.memoryTotal, 1)) } ?? 0
             DashboardMetricLayout {
-                RingGauge(fraction: fraction, tint: model.monitor.latest?.memoryPressure.tint ?? .green) {
+                RingGauge(fraction: fraction, tint: model.monitor.latest?.memoryPressure.tint ?? .green, animatesChanges: false) {
                     VStack(spacing: 0) {
                         Text(model.monitor.latest == nil ? "—" : NumberFormatting.percent(fraction))
                             .font(.headline.monospacedDigit())

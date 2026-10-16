@@ -134,7 +134,7 @@ struct PerformanceCPUCard: View {
     var body: some View {
         PerformancePanel("CPU", symbol: "cpu") {
             HStack(alignment: .center, spacing: 20) {
-                RingGauge(fraction: sample.cpuUsage, tint: PerformancePalette.cpu, lineWidth: 11) {
+                RingGauge(fraction: sample.cpuUsage, tint: PerformancePalette.cpu, lineWidth: 11, animatesChanges: false) {
                     VStack(spacing: 0) {
                         Text(sample.isCPUAvailable ? NumberFormatting.percent(sample.cpuUsage) : "—")
                             .font(.system(size: 24, weight: .bold, design: .rounded))
@@ -314,7 +314,7 @@ struct PerformanceMemoryCard: View {
         let memory = sample.memory
         PerformancePanel("Memory", symbol: "memorychip") {
             HStack(alignment: .center, spacing: 20) {
-                RingGauge(fraction: sample.memoryUsedFraction, tint: sample.memoryPressure.tint, lineWidth: 11) {
+                RingGauge(fraction: sample.memoryUsedFraction, tint: sample.memoryPressure.tint, lineWidth: 11, animatesChanges: false) {
                     VStack(spacing: 0) {
                         Text(PerformanceFormat.memory(sample.memoryUsed))
                             .font(.system(size: 18, weight: .bold, design: .rounded))

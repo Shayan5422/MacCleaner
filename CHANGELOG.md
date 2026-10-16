@@ -35,6 +35,7 @@ Mac Cleaner becomes the assistant that watches over your Mac: an antivirus with 
 - The sidebar has a new **Protection** group (Antivirus, Security, Ports & Network); Automation and History moved under System.
 
 ### Fixed
+- The live CPU and memory gauges on the Dashboard and Performance pages animated every update, and each animation frame laid out the whole page again: an open Dashboard used about 20% CPU. It now uses about 2%.
 - Files that Spotlight, Quick Look or XProtect were only reading for a moment (for example a freshly downloaded app being indexed) were skipped as "in use" during cleanup.
 - Counts of one read correctly ("1 file", "1 folder couldn't be read") throughout the app.
 

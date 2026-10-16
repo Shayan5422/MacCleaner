@@ -107,7 +107,8 @@ struct BalancedGrid: Layout {
         max(0, (width - spacing * CGFloat(rowLength - 1)) / CGFloat(rowLength))
     }
 
-    private func rowHeights(_ rows: [Int], width: CGFloat, subviews: Subviews) -> [CGFloat] {
+    private func rowHeights(_ rows: [Int], width: CGFloat, subviews: Subviews, cache: inout Cache) -> [CGFloat] {
+        if let cached = cache.rowHeights[width] { return cached }
         var heights: [CGFloat] = []
         var index = 0
         for length in rows {
@@ -120,14 +121,26 @@ struct BalancedGrid: Layout {
             heights.append(tallest)
         }
         if uniformRowHeights, let tallest = heights.max() {
-            return heights.map { _ in tallest }
+            heights = heights.map { _ in tallest }
         }
+        cache.rowHeights[width] = heights
         return heights
     }
 
     // MARK: Layout
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    /// Row heights by width. SwiftUI starts a new cache whenever the cards change, so within one
+    /// update each card is measured once per width instead of on every sizing and placing call
+    /// (cards with live values, like the Dashboard's, update every second).
+    struct Cache {
+        var rowHeights: [CGFloat: [CGFloat]] = [:]
+    }
+
+    func makeCache(subviews: Subviews) -> Cache {
+        Cache()
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
         guard !subviews.isEmpty else { return .zero }
         let width: CGFloat
         if let proposed = proposal.width, proposed.isFinite {
@@ -142,15 +155,15 @@ struct BalancedGrid: Layout {
             width = minimumItemWidth * CGFloat(columns) + spacing * CGFloat(columns - 1)
         }
         let rows = rows(count: subviews.count, width: width)
-        let heights = rowHeights(rows, width: width, subviews: subviews)
+        let heights = rowHeights(rows, width: width, subviews: subviews, cache: &cache)
         let height = heights.reduce(0, +) + (rowSpacing ?? spacing) * CGFloat(max(0, rows.count - 1))
         return CGSize(width: width, height: height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
         guard !subviews.isEmpty else { return }
         let rows = rows(count: subviews.count, width: bounds.width)
-        let heights = rowHeights(rows, width: bounds.width, subviews: subviews)
+        let heights = rowHeights(rows, width: bounds.width, subviews: subviews, cache: &cache)
         var index = 0
         var y = bounds.minY
         for (row, length) in rows.enumerated() {

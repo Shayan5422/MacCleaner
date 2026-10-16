@@ -221,6 +221,10 @@ struct RingGauge<Center: View>: View {
     var fraction: Double
     var tint: Color
     var lineWidth: CGFloat = 10
+    /// Animates changes of `fraction`. Gauges of live values (CPU, memory) turn it off: every
+    /// frame of the animation lays the page out again, which made an open Dashboard use about
+    /// 20% CPU instead of 2%.
+    var animatesChanges = true
     @ViewBuilder var center: () -> Center
 
     var body: some View {
@@ -234,7 +238,7 @@ struct RingGauge<Center: View>: View {
                     style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(.easeInOut(duration: 0.6), value: fraction)
+                .animation(animatesChanges ? .easeInOut(duration: 0.6) : nil, value: fraction)
             center()
         }
         .padding(lineWidth / 2)

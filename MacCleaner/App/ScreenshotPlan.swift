@@ -59,6 +59,30 @@ enum ScreenshotPlan {
             .init(name: "startup", section: .startup, prepare: { environment in
                 await environment.startup.refresh()
             }),
+            .init(name: "startup-opened-at-login", section: .startup, apply: { environment in
+                environment.startup.page = .openedAtLogin
+            }, reset: { environment in
+                environment.startup.page = .items
+            }, settle: .seconds(4)),
+            .init(name: "startup-changes", section: .startup, apply: { environment in
+                environment.startup.page = .changes
+            }, reset: { environment in
+                environment.startup.page = .items
+            }, settle: .seconds(2)),
+            .init(name: "startup-background-items", section: .startup, apply: { environment in
+                environment.startup.page = .everything
+            }, reset: { environment in
+                environment.startup.page = .items
+            }, settle: .seconds(2)),
+            .init(name: "network-ports", section: .network, apply: { environment in
+                environment.network.tab = .ports
+            }, settle: .seconds(5)),
+            .init(name: "network-connections", section: .network, apply: { environment in
+                environment.network.tab = .connections
+            }, settle: .seconds(5)),
+            .init(name: "network-check", section: .network, apply: { environment in
+                environment.network.tab = .check
+            }, settle: .seconds(6)),
             .init(name: "automation", section: .automation),
             .init(name: "cloud", section: .cloud, settle: .seconds(4)),
             .init(name: "updates", section: .updates, prepare: { environment in
@@ -125,6 +149,11 @@ enum ScreenshotPlan {
                 ScreenshotAutomation.closeSettings()
             }, settle: .seconds(2)),
             .init(name: "menubar", section: .dashboard, target: .menuBarHub, settle: .seconds(3)),
+            .init(name: "activity", section: .dashboard, target: .window(title: "Activity"), apply: { _ in
+                ScreenshotAutomation.openWindow?(id: AppWindowID.activity)
+            }, reset: { _ in
+                ScreenshotAutomation.closeWindow(titled: "Activity")
+            }, settle: .seconds(2)),
             .init(name: "onboarding", section: .dashboard, target: .onboarding, settle: .seconds(1)),
         ]
     }

@@ -1,33 +1,33 @@
 import SwiftUI
 
+/// The parts of the Startup Items page.
+enum StartupPage: String, CaseIterable, Identifiable {
+    case items, openedAtLogin, changes, everything
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .items: return "Startup Items"
+        case .openedAtLogin: return "Opened at Login"
+        case .changes: return "Changes"
+        case .everything: return "Background Items"
+        }
+    }
+}
+
 /// Startup & Background Activity Manager, with Guardian's view of what opened at login,
 /// what changed and every other way software starts automatically.
 struct StartupView: View {
     @Bindable var model: StartupViewModel
     var startupGuard: StartupGuardModel
-    @State private var page: StartupPage = .items
-
-    enum StartupPage: String, CaseIterable, Identifiable {
-        case items, openedAtLogin, changes, everything
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .items: return "Startup Items"
-            case .openedAtLogin: return "Opened at Login"
-            case .changes: return "Changes"
-            case .everything: return "Background Items"
-            }
-        }
-    }
 
     var body: some View {
         PageScroll {
             PageHeader(section: .startup, subtitle: "Apps and background services that start automatically. Turn off what you don't need.") {
                 StartupHeaderActions(model: model)
             }
-            Picker("Show", selection: $page) {
+            Picker("Show", selection: $model.page) {
                 ForEach(StartupPage.allCases) { page in
                     Text(page.title).tag(page)
                 }
@@ -37,7 +37,7 @@ struct StartupView: View {
             .frame(maxWidth: 620)
             .accessibilityLabel("Startup Items sections")
 
-            switch page {
+            switch model.page {
             case .items:
                 if let message = model.statusMessage {
                     StartupStatusBanner(message: message) { model.statusMessage = nil }

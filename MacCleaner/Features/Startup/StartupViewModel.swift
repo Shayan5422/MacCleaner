@@ -92,6 +92,8 @@ final class StartupViewModel {
     let cleanupFlow = CleanupFlow()
 
     private(set) var inventory: StartupInventory?
+    /// The part of the page that's showing.
+    var page: StartupPage = .items
     private(set) var isLoading = false
     private(set) var progress: Double = 0
     private(set) var progressMessage = ""

@@ -79,6 +79,29 @@ codesign --verify --deep --strict --verbose=2 "$APP"
 codesign -dv --verbose=4 "$APP" 2>&1 | grep -E "Authority=Developer ID Application|TeamIdentifier|flags=.*runtime" || {
   echo "The app isn't signed with Developer ID and the hardened runtime" >&2; exit 1; }
 
+# notarytool reports "Accepted" or "Invalid"; anything but Accepted stops the release with Apple's log.
+notarize() {
+  local file="$1" output id
+  output="$(xcrun notarytool submit "$file" "${NOTARY_AUTH[@]}" --wait 2>&1)" || { echo "$output" >&2; exit 1; }
+  echo "$output"
+  if ! grep -q "status: Accepted" <<<"$output"; then
+    id="$(sed -n 's/^ *id: \([0-9a-f-]*\).*/\1/p' <<<"$output" | head -1)"
+    [[ -n "$id" ]] && xcrun notarytool log "$id" "${NOTARY_AUTH[@]}" >&2
+    echo "Notarization of $(basename "$file") wasn't accepted" >&2
+    exit 1
+  fi
+}
+
+if [[ $NOTARIZE -eq 1 ]]; then
+  # Notarize and staple the app itself first, so the copy inside the disk image carries its
+  # ticket and opens without a network check even when the Mac is offline.
+  echo "==> Notarizing the app (this usually takes a few minutes)"
+  ditto -c -k --keepParent "$APP" "$BUILD/notarize-app.zip"
+  notarize "$BUILD/notarize-app.zip"
+  rm -f "$BUILD/notarize-app.zip"
+  xcrun stapler staple "$APP"
+fi
+
 echo "==> Creating disk image"
 STAGING="$BUILD/dmg"
 mkdir -p "$STAGING"
@@ -96,13 +119,13 @@ done
 codesign --sign "Developer ID Application" --timestamp "${SIGN_KEYCHAIN[@]}" "$BUILD/$ARTIFACT.dmg"
 
 if [[ $NOTARIZE -eq 1 ]]; then
-  echo "==> Notarizing (this usually takes a few minutes)"
-  xcrun notarytool submit "$BUILD/$ARTIFACT.dmg" "${NOTARY_AUTH[@]}" --wait
+  echo "==> Notarizing the disk image"
+  notarize "$BUILD/$ARTIFACT.dmg"
   xcrun stapler staple "$BUILD/$ARTIFACT.dmg"
-  xcrun stapler staple "$APP"
   echo "==> Gatekeeper assessment"
   spctl --assess --type open --context context:primary-signature --verbose "$BUILD/$ARTIFACT.dmg"
   spctl --assess --type execute --verbose "$APP"
+  xcrun stapler validate "$APP"
 fi
 
 echo "==> Creating zip"

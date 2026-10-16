@@ -34,7 +34,7 @@ struct AntivirusSettingsTab: View {
                 Text("Unwanted apps made for Windows or Linux aren't reported: they can't affect a Mac, and they cause most false alarms.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Detect Windows and Linux threats", isOn: $settings.detectNonMacThreats)
-                Text("They can't run on a Mac, but you could pass them on to other computers.")
+                Text("They can't run on a Mac, but you could pass them on to other computers. Full, custom and drive scans include them; Quick Scan sticks to threats that can run on this Mac.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Scan inside archives (zip, gzip, tar) and universal apps", isOn: $settings.scanArchives)
                 Picker("Skip files larger than", selection: $settings.maxFileSizeMB) {

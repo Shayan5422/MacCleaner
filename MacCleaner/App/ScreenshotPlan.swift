@@ -74,6 +74,33 @@ enum ScreenshotPlan {
             }, reset: { environment in
                 environment.startup.page = .items
             }, settle: .seconds(2)),
+            .init(name: "antivirus-definitions", section: .antivirus, prepare: { environment in
+                let antivirus = environment.antivirus
+                if !antivirus.hasDefinitions { antivirus.installDefinitions() }
+                await ScreenshotAutomation.wait(timeout: .seconds(900)) { !antivirus.isUpdatingDefinitions && antivirus.hasDefinitions }
+            }, apply: { environment in
+                environment.antivirus.tab = .definitions
+            }, settle: .seconds(2)),
+            .init(name: "antivirus-test", section: .antivirus, prepare: { environment in
+                let antivirus = environment.antivirus
+                antivirus.testProtection()
+                await ScreenshotAutomation.wait(timeout: .seconds(60)) { !antivirus.isTestingProtection }
+            }, apply: { environment in
+                environment.antivirus.tab = .scan
+            }, settle: .seconds(2)),
+            .init(name: "antivirus-quick-scan", section: .antivirus, prepare: { environment in
+                let antivirus = environment.antivirus
+                antivirus.startQuickScan()
+                await ScreenshotAutomation.wait(timeout: .seconds(900)) { !antivirus.isScanning && antivirus.lastReport != nil }
+            }, apply: { environment in
+                environment.antivirus.tab = .scan
+            }, settle: .seconds(2)),
+            .init(name: "antivirus-shields", section: .antivirus, apply: { environment in
+                environment.antivirus.tab = .shields
+            }, settle: .seconds(2)),
+            .init(name: "antivirus-history", section: .antivirus, apply: { environment in
+                environment.antivirus.tab = .history
+            }, settle: .seconds(1)),
             .init(name: "network-ports", section: .network, apply: { environment in
                 environment.network.tab = .ports
             }, settle: .seconds(5)),

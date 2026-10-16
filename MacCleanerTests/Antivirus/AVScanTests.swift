@@ -232,3 +232,60 @@ struct AVScanTests {
         #expect(mixed.scanFile(atPath: "/x", options: AVScanOptions()).detections.map(\.signatureName) == ["Win.Trojan.Agent-1", "PUA.Osx.Adware.Foo-1"])
     }
 }
+
+@Suite("Quick Scan in Downloads and Desktop")
+struct AVQuickScanCarrierTests {
+    @Test func downloadsAndDesktopAreLimitedToFilesThatCanCarryMalware() async throws {
+        let tree = try AVTestFolder("AVQuickCarriers")
+        let sources = AVQuickScanSources(
+            home: tree.path,
+            runningExecutables: { [] },
+            launchdFolders: [],
+            loginItemPaths: { [] },
+            applicationFolders: [],
+            includesPrivacyProtectedFolders: true,
+            knownAdwareLocations: { [] },
+            extraRoots: []
+        )
+        let plan = await AVScanPlanner.quickScan(sources: sources)
+        for folder in ["/Downloads", "/Desktop"] {
+            let target = try #require(plan.targets.first { $0.path == tree.path + folder })
+            #expect(target.filter == .carriers)
+            #expect(target.skippedFolderNames.isSuperset(of: ["node_modules", ".git", "DerivedData"]))
+            #expect(target.arrivedWithinDays == AVScanPlanner.recentDays)
+        }
+        #expect(!plan.limitations.contains { $0.title.contains("Downloads and Desktop") })
+    }
+
+    @Test func carrierFilterKeepsProgramsArchivesAndDocumentsOnly() throws {
+        let tree = try AVTestFolder("AVCarrierFilter")
+        let tool = try tree.makeFile("tool", contents: Data("#!/bin/sh\n".utf8), mode: 0o755)
+        let note = try tree.makeFile("notes", contents: Data("hello".utf8), mode: 0o644)
+        for name in ["Invoice.pdf", "setup.exe", "Archive.zip", "Installer.dmg", "report.docm", "page.html", "run.sh", "ext.crx"] {
+            #expect(AVCodeFilter.includesCarrier(name: name, parent: "Downloads", path: "/nonexistent/" + name), "\(name)")
+        }
+        for name in ["photo.jpg", "song.mp3", "movie.mov", "data.csv", "README.md", "notes.txt"] {
+            #expect(!AVCodeFilter.includesCarrier(name: name, parent: "Downloads", path: "/nonexistent/" + name), "\(name)")
+        }
+        // Files without an extension count when they're executable.
+        #expect(AVCodeFilter.includesCarrier(name: "tool", parent: "Downloads", path: tool))
+        #expect(!AVCodeFilter.includesCarrier(name: "notes", parent: "Downloads", path: note))
+    }
+}
+
+@Suite("Recent files")
+struct AVRecentFileTests {
+    /// A file counts as recent when it was modified or created on this volume after the cutoff;
+    /// an archive member keeps its old modification date but gets a new creation date when extracted.
+    @Test func recentByModificationOrCreation() throws {
+        let tree = try AVTestFolder("AVRecent")
+        let file = try tree.makeFile("old-member.txt")
+        let now = Date().timeIntervalSince1970
+        let longAgo = now - 400 * 86_400
+        #expect(AVScanSession.arrived(after: now - 90 * 86_400, modified: now, path: file))
+        // Old modification date, but created just now (like an extracted archive member).
+        #expect(AVScanSession.arrived(after: now - 90 * 86_400, modified: longAgo, path: file))
+        // A cutoff in the future: nothing about the file is newer.
+        #expect(!AVScanSession.arrived(after: now + 3600, modified: longAgo, path: file))
+    }
+}

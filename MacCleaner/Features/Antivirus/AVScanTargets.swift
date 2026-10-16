@@ -8,6 +8,9 @@ struct AVScanTarget: Sendable, Hashable {
         case all
         /// Programs, scripts and libraries only (executables, `.dylib`, shell and other scripts).
         case code
+        /// Files that can carry malware: `.code` plus archives, disk images, installers, documents
+        /// that can hold macros or scripts, PDFs, web pages and Windows or Android programs.
+        case carriers
     }
 
     var path: String
@@ -19,6 +22,8 @@ struct AVScanTarget: Sendable, Hashable {
     var isPrivacyProtected = false
     /// Folders with these names aren't entered (caches that hold no programs).
     var skippedFolderNames: Set<String> = []
+    /// Only files that arrived on this Mac (were created or changed) within this many days.
+    var arrivedWithinDays: Int?
 }
 
 /// What a scan will look at.
@@ -39,6 +44,21 @@ enum AVCodeFilter {
     ]
     static let libraryExtensions: Set<String> = ["dylib", "so"]
     static let installerExtensions: Set<String> = ["pkg", "mpkg", "dmg"]
+    /// What the `.carriers` filter adds to `.code`.
+    static let carrierExtensions: Set<String> = [
+        "zip", "gz", "tgz", "tar", "bz2", "tbz", "xz", "txz", "7z", "rar", "lzma", "cab", "iso", "img", "xip", "sit",
+        "app", "dylib", "bundle", "plugin", "kext", "mobileconfig", "terminal", "inetloc", "webloc", "fileloc",
+        "pdf", "doc", "docm", "docx", "dot", "dotm", "xls", "xlsm", "xlsx", "xlsb", "xla", "xlam", "ppt", "pptm", "pptx", "ppsm",
+        "rtf", "odt", "ods", "odp", "one", "chm", "html", "htm", "xhtml", "shtml", "svg", "hta", "js", "jse", "wsf", "wsh",
+        "exe", "dll", "msi", "scr", "com", "bat", "cmd", "lnk", "cpl", "ocx", "sys", "vbe", "apk", "dex", "elf", "bin", "run", "deb", "rpm",
+        "class", "crx", "xpi", "swf", "iqy", "slk", "reg", "url",
+    ]
+
+    /// `includes(name:parent:path:)` or a file type in `carrierExtensions`.
+    static func includesCarrier(name: String, parent: String, path: String) -> Bool {
+        let ext = name.lastIndex(of: ".").map { name[name.index(after: $0)...].lowercased() } ?? ""
+        return carrierExtensions.contains(ext) || includes(name: name, parent: parent, path: path)
+    }
 
     /// `name` lives in a folder called `parent`; `path` is used for the executable-bit check
     /// of files without an extension.
@@ -65,6 +85,14 @@ enum AVScanScope {
     }
 
     /// Caches and data stores below `~/Library/Application Support` that never hold programs.
+    /// Developer folders that hold dependencies and build products rather than downloads
+    /// (skipped by Quick Scan in Downloads and Desktop; Full Scan still checks them).
+    static let developerFolderNames: Set<String> = [
+        "node_modules", "bower_components", ".git", ".svn", ".hg", "DerivedData", ".build", "Pods", "Carthage",
+        ".venv", "venv", "__pycache__", ".tox", ".mypy_cache", ".pytest_cache", ".gradle", ".next", ".nuxt", ".turbo",
+        ".parcel-cache", ".angular", ".dart_tool", ".cargo", "target",
+    ]
+
     static let cacheFolderNames: Set<String> = [
         "Cache", "Caches", "cache", "Code Cache", "GPUCache", "ShaderCache", "GrShaderCache", "DawnCache", "DawnGraphiteCache",
         "Service Worker", "IndexedDB", "blob_storage", "CacheStorage", "Crashpad", "MobileSync", "CrashReporter",
@@ -103,6 +131,9 @@ struct AVQuickScanSources: Sendable {
 }
 
 enum AVScanPlanner {
+    /// How far back Quick Scan looks in Downloads and Desktop.
+    static let recentDays = 90
+
     /// Where Mac malware usually lives; meant to finish in a minute or two.
     static func quickScan(sources: AVQuickScanSources, kind: AVScanKind = .quick) async -> AVScanPlan {
         var plan = AVScanPlan(kind: kind)
@@ -155,8 +186,15 @@ enum AVScanPlanner {
         }
 
         if sources.includesPrivacyProtectedFolders {
-            plan.targets.append(AVScanTarget(path: home + "/Downloads", maxDepth: 6, label: "your Downloads folder", isPrivacyProtected: true))
-            plan.targets.append(AVScanTarget(path: home + "/Desktop", maxDepth: 6, label: "your Desktop", isPrivacyProtected: true))
+            // Files that can carry malware, outside developer projects' dependencies and build products:
+            // a Quick Scan stays quick even when Downloads holds source trees. Full Scan checks everything.
+            let skipped = AVScanScope.developerFolderNames.union(AVScanScope.cacheFolderNames)
+            // Only what arrived in the last 90 days: the File Shield checks new files as they arrive,
+            // and Full Scan covers the rest.
+            plan.targets.append(AVScanTarget(path: home + "/Downloads", filter: .carriers, maxDepth: 6, label: "your Downloads folder",
+                                             isPrivacyProtected: true, skippedFolderNames: skipped, arrivedWithinDays: AVScanPlanner.recentDays))
+            plan.targets.append(AVScanTarget(path: home + "/Desktop", filter: .carriers, maxDepth: 6, label: "your Desktop",
+                                             isPrivacyProtected: true, skippedFolderNames: skipped, arrivedWithinDays: AVScanPlanner.recentDays))
         } else {
             plan.limitations.append(AVLimitation(
                 title: "Downloads and Desktop weren't scanned",

@@ -172,9 +172,16 @@ struct AVThreatRow: View {
         .accessibilityLabel("\(threat.category.badgeTitle): \(threat.name) in \(threat.fileName)")
     }
 
+    /// Universal binaries' slices are named by architecture ("x86_64"); anything else is an archive member.
+    static func describe(member: String) -> String {
+        let architectures: Set<String> = ["x86_64", "x86_64h", "arm64", "arm64e", "i386", "ppc", "ppc64", "armv7"]
+        if architectures.contains(member) { return "In its \(member) code" }
+        return "Inside the archive: \(member)"
+    }
+
     private var detailLine: String {
         var parts: [String] = []
-        if let member = threat.memberPath { parts.append("Inside the archive: \(member)") }
+        if let member = threat.memberPath { parts.append(Self.describe(member: member)) }
         if let app = threat.enclosingApp { parts.append("Inside \((app as NSString).lastPathComponent)") }
         parts.append(threat.sourceTitle)
         if threat.foundBy != .scan { parts.append("found by \(threat.foundBy.title)") }
@@ -252,7 +259,7 @@ struct AVNoScanYetCard: View {
                 .font(.system(size: 34))
                 .foregroundStyle(.secondary)
             Text("No scan yet").font(.title3.weight(.semibold))
-            Text("Quick Scan checks the places where Mac malware usually hides: running programs, startup items, apps, browser extensions, Downloads and Desktop. It usually takes a minute or two.")
+            Text("Quick Scan checks the places where Mac malware usually hides: running programs, startup items, apps, browser extensions, and the programs, installers, archives and documents that arrived in Downloads and on the Desktop in the last 90 days. It usually takes a minute or two.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

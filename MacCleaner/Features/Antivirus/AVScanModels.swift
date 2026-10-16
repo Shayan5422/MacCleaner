@@ -16,6 +16,15 @@ enum AVScanKind: String, Codable, Sendable, CaseIterable {
         }
     }
 
+    /// Quick checks look only for threats that can run on this Mac; Full, custom and drive scans
+    /// also report Windows and Linux malware when "Detect Windows and Linux threats" is on.
+    var focusesOnMacThreats: Bool {
+        switch self {
+        case .quick, .smartScan, .scheduled: return true
+        case .full, .custom, .volume, .downloads: return false
+        }
+    }
+
     var symbolName: String {
         switch self {
         case .quick, .smartScan, .scheduled: return "bolt.shield"

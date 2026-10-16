@@ -158,6 +158,16 @@ final class AVScanSession: @unchecked Sendable {
         if isNew { _ = queue.push(job) }
     }
 
+    /// True when the file was modified, or created on this volume (a download, an extracted archive member), after `cutoff`.
+    static func arrived(after cutoff: Double, modified: Double, path: String) -> Bool {
+        if modified >= cutoff { return true }
+        var info = stat()
+        guard lstat(path, &info) == 0 else { return true }
+        let birth = Double(info.st_birthtimespec.tv_sec)
+        let change = Double(info.st_ctimespec.tv_sec)
+        return birth >= cutoff || change >= cutoff
+    }
+
     private func walk(_ target: AVScanTarget) {
         guard !exclusions.isExcluded(target.path), !AVScanScope.isSystemPath(target.path) else { return }
         var info = stat()
@@ -174,12 +184,18 @@ final class AVScanSession: @unchecked Sendable {
         let maxSize = configuration.options.maxFileSize
         let filter = target.filter
         let skippedNames = target.skippedFolderNames
+        let arrivedAfter = target.arrivedWithinDays.map { Date().timeIntervalSince1970 - Double($0) * 86_400 }
         let walker = ParallelDirectoryWalker<Void>(options: options, handlers: WalkHandlers(
             didRead: { [self] directory, entries in
                 let parent = (directory.path as NSString).lastPathComponent
                 for entry in entries where entry.type == .regular {
                     let path = PathUtilities.join(directory.path, entry.name)
-                    if filter == .code && !AVCodeFilter.includes(name: entry.name, parent: parent, path: path) { continue }
+                    switch filter {
+                    case .all: break
+                    case .code: if !AVCodeFilter.includes(name: entry.name, parent: parent, path: path) { continue }
+                    case .carriers: if !AVCodeFilter.includesCarrier(name: entry.name, parent: parent, path: path) { continue }
+                    }
+                    if let arrivedAfter, !Self.arrived(after: arrivedAfter, modified: entry.modificationTime, path: path) { continue }
                     if entry.isDataless {
                         lock.withLock { report.skippedCloudOnly += 1; progress.filesSkipped += 1 }
                         continue
@@ -343,6 +359,10 @@ final class AVBlockingQueue<Element: Sendable>: @unchecked Sendable {
 enum AVScanCoordinator {
     static func run(plan: AVScanPlan, configuration: AVScanConfiguration,
                     progress: @escaping @Sendable (AVScanProgress) -> Void = { _ in }) async -> AVScanReport {
+        var configuration = configuration
+        // Quick checks look for threats that can run on this Mac. Windows and Linux programs (for
+        // example a Wine prefix's thousands of DLLs) are left to Full, custom and drive scans.
+        if plan.kind.focusesOnMacThreats { configuration.options.detectNonMacThreats = false }
         let session = AVScanSession(configuration: configuration, kind: plan.kind)
         let poller = Task {
             while !Task.isCancelled {

@@ -1,0 +1,12 @@
+# Keeps the GitHub Actions used by CI and the release workflow up to date.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "CI"
+    groups:
+      actions:
+        patterns: ["*"]

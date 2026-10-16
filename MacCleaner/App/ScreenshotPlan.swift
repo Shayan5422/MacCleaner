@@ -125,10 +125,11 @@ enum ScreenshotPlan {
                 ScreenshotAutomation.closeSettings()
             }, settle: .seconds(2)),
             .init(name: "menubar", section: .dashboard, target: .menuBarHub, settle: .seconds(3)),
+            .init(name: "onboarding", section: .dashboard, target: .onboarding, settle: .seconds(1)),
         ]
     }
 
-    /// The Updates page's default state: list, no inspector, no notes, no sheet.
+    /// The Updates page's default state: list, no details panel, no notes, no sheet.
     private static func resetUpdates(_ model: UpdatesViewModel) {
         model.inspectedRowID = nil
         model.isShowingUpdateAll = false

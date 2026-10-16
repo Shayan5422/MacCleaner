@@ -151,6 +151,9 @@ struct RootView: View {
                 ScreenshotAutomation.openWindow = openWindow
                 ScreenshotAutomation.openSettings = openSettings
                 await ScreenshotAutomation.run(environment: environment, steps: ScreenshotPlan.steps)
+            } else if WindowCycleExercise.isRequested {
+                showOnboarding = false
+                WindowCycleExercise.startIfRequested(environment: environment, openSettings: openSettings)
             }
         }
         #endif

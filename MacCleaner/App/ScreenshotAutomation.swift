@@ -26,8 +26,10 @@ enum ScreenshotAutomation {
         case window(title: String)
         /// The Settings window.
         case settings
-        /// The menu bar popover, rendered in a panel of its own, and the menu bar item.
+        /// The menu bar popover, rendered in a panel of its own, and the menu bar item's glyphs.
         case menuBarHub
+        /// The first-launch introduction, rendered in a panel of its own.
+        case onboarding
     }
 
     struct Step {
@@ -107,8 +109,7 @@ enum ScreenshotAutomation {
             return
         }
         // An active, key window draws prominent buttons and selections in their real colors.
-        NSApp.activate()
-        window.makeKeyAndOrderFront(nil)
+        bringToFront(window)
 
         var prepared = Set<String>()
         var count = 0
@@ -129,8 +130,14 @@ enum ScreenshotAutomation {
                     let url = directory.appendingPathComponent("\(step.name)\(suffix).png")
                     switch step.target {
                     case .main:
-                        window.makeKeyAndOrderFront(nil)
+                        bringToFront(window)
+                        try? await Task.sleep(for: .milliseconds(200))
                         capture(window, to: url)
+                        // A sheet on its own too, in case the window server leaves it out of
+                        // the composite above.
+                        if let sheet = window.attachedSheet, sheet.isVisible {
+                            capture(sheet, to: directory.appendingPathComponent("\(step.name)-sheet\(suffix).png"))
+                        }
                     case .window(let title):
                         if let other = NSApp.windows.first(where: { $0.title == title && $0.isVisible }) {
                             other.makeKeyAndOrderFront(nil)
@@ -148,10 +155,11 @@ enum ScreenshotAutomation {
                             print("Screenshot automation: the Settings window isn't open for \(step.name)")
                         }
                     case .menuBarHub:
-                        await captureMenuBarHub(environment: environment, to: url, appearance: appearance)
-                        if let item = statusItemWindow() {
-                            capture(item, to: directory.appendingPathComponent("\(step.name)-item\(suffix).png"))
-                        }
+                        await captureHosted(AnyView(MenuBarHub(environment: environment)), material: .popover, cornerRadius: 12, to: url, appearance: appearance)
+                        renderMenuBarGlyphs(to: directory.appendingPathComponent("\(step.name)-glyphs\(suffix).png"), appearance: appearance)
+                    case .onboarding:
+                        let onboarding = OnboardingView(services: environment.services).environment(environment.services.permissions)
+                        await captureHosted(AnyView(onboarding), material: .windowBackground, cornerRadius: 10, to: url, appearance: appearance)
                     }
                     count += 1
                     await step.reset(environment)
@@ -160,6 +168,16 @@ enum ScreenshotAutomation {
         }
         print("Screenshot automation: wrote \(count) images to \(directory.path)")
         NSApp.terminate(nil)
+    }
+
+    /// Debug tooling only: asks to become the active app the way older SDKs did, since
+    /// cooperative activation may leave a launched-from-Terminal app in the background.
+    static func bringToFront(_ window: NSWindow) {
+        if !NSApp.isActive {
+            NSApp.perform(NSSelectorFromString("activateIgnoringOtherApps:"), with: NSNumber(value: true))
+            NSApp.activate()
+        }
+        window.makeKeyAndOrderFront(nil)
     }
 
     static func mainWindow() -> NSWindow? {
@@ -180,15 +198,10 @@ enum ScreenshotAutomation {
         settingsWindow()?.close()
     }
 
-    /// The menu bar item's window (an `NSStatusBarWindow`).
-    static func statusItemWindow() -> NSWindow? {
-        NSApp.windows.first { String(describing: type(of: $0)).contains("StatusBarWindow") && $0.isVisible && $0.frame.width < 200 }
-    }
-
-    /// Renders the menu bar popover in a temporary panel with the popover material, as
-    /// it appears under the menu bar item, and captures it.
-    static func captureMenuBarHub(environment: AppEnvironment, to url: URL, appearance: NSAppearance.Name) async {
-        let hosting = NSHostingView(rootView: MenuBarHub(environment: environment))
+    /// Renders a view in a temporary panel with the given material (the menu bar popover,
+    /// the onboarding sheet) and captures it.
+    static func captureHosted(_ view: AnyView, material kind: NSVisualEffectView.Material, cornerRadius: CGFloat, to url: URL, appearance: NSAppearance.Name) async {
+        let hosting = NSHostingView(rootView: view)
         let size = hosting.fittingSize
         let panel = NSPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isOpaque = false
@@ -196,11 +209,11 @@ enum ScreenshotAutomation {
         panel.hasShadow = true
         panel.appearance = NSAppearance(named: appearance)
         let material = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
-        material.material = .popover
+        material.material = kind
         material.state = .active
         material.blendingMode = .behindWindow
         material.wantsLayer = true
-        material.layer?.cornerRadius = 12
+        material.layer?.cornerRadius = cornerRadius
         material.layer?.masksToBounds = true
         hosting.frame = material.bounds
         hosting.autoresizingMask = [.width, .height]
@@ -275,6 +288,45 @@ enum ScreenshotAutomation {
         return createImage(.null, includingWindow, UInt32(truncatingIfNeeded: window.windowNumber), bestResolution)?.takeRetainedValue()
     }
 
+    /// Draws the menu bar item's variants (icon, ports, CPU, free space, attention and
+    /// threat dots) on a menu bar–like strip, tinted the way the menu bar tints them.
+    static func renderMenuBarGlyphs(to url: URL, appearance: NSAppearance.Name) {
+        let variants: [(String?, MenuBarGlyph.Alert?)] = [(nil, nil), ("3", nil), ("\u{2007}12%", nil), ("362 GB", nil), ("3", .attention), (nil, .threat)]
+        let images = variants.map { MenuBarGlyph.image(text: $0.0, alert: $0.1) }
+        let gap: CGFloat = 18
+        let width = images.reduce(gap) { $0 + $1.size.width + gap }
+        let height: CGFloat = 26
+        let scale: CGFloat = 4
+        guard let look = NSAppearance(named: appearance),
+              let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(width * scale), pixelsHigh: Int(height * scale), bitsPerSample: 8,
+                                         samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return }
+        rep.size = NSSize(width: width, height: height)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        look.performAsCurrentDrawingAppearance {
+            (appearance == .darkAqua ? NSColor(white: 0.17, alpha: 1) : NSColor(white: 0.93, alpha: 1)).setFill()
+            NSRect(x: 0, y: 0, width: width, height: height).fill()
+            var x = gap
+            for image in images {
+                let rect = NSRect(x: x, y: (height - image.size.height) / 2, width: image.size.width, height: image.size.height)
+                if image.isTemplate {
+                    let tinted = NSImage(size: image.size, flipped: false) { bounds in
+                        image.draw(in: bounds)
+                        NSColor.labelColor.set()
+                        bounds.fill(using: .sourceAtop)
+                        return true
+                    }
+                    tinted.draw(in: rect)
+                } else {
+                    image.draw(in: rect)
+                }
+                x += image.size.width + gap
+            }
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        try? rep.representation(using: .png, properties: [:])?.write(to: url)
+    }
+
     /// Waits until `condition` is true or the timeout passes.
     static func wait(timeout: Duration = .seconds(180), until condition: @MainActor () -> Bool) async {
         let deadline = ContinuousClock.now + timeout
@@ -289,4 +341,175 @@ enum ScreenshotAutomation {
         return arguments[index + 1]
     }
 }
+/// Debug-only self-test of the menu bar mode, for checking a build without clicking:
+///
+///     Mac Cleaner --exercise-windows <cycles>
+///
+/// Each cycle shows a page (the Uninstaller with an app selected, so its details panel is
+/// open), closes the main window the way its close button does, and reopens it from the
+/// menu bar's "Open Mac Cleaner" or a Dock click. With no window open it also opens About
+/// and Settings. After every step it checks the windows and the Dock icon policy, prints
+/// one line per check to standard error, and quits when it's done.
+///
+/// The app stays open without windows only while the menu bar item is on. To try that
+/// while the saved setting is off, add `-showMenuBarExtra YES`; the menu bar item then
+/// saves the setting as on, so turn it off again afterwards.
+@MainActor
+enum WindowCycleExercise {
+    private static var started = false
+    private static var checks = 0
+    private static var failures = 0
+
+    static var isRequested: Bool { cycles != nil }
+
+    private static var cycles: Int? {
+        let arguments = CommandLine.arguments
+        guard let index = arguments.firstIndex(of: "--exercise-windows"), index + 1 < arguments.count else { return nil }
+        return Int(arguments[index + 1]).map { max(1, $0) }
+    }
+
+    /// Starts once, in a task of its own: closing the main window cancels its view's tasks.
+    static func startIfRequested(environment: AppEnvironment, openSettings: OpenSettingsAction) {
+        guard let cycles, !started else { return }
+        started = true
+        Task { @MainActor in
+            await run(cycles: cycles, environment: environment, openSettings: openSettings)
+        }
+    }
+
+    private static func run(cycles: Int, environment: AppEnvironment, openSettings: OpenSettingsAction) async {
+        await settle(2)
+        log("start: \(cycles) cycles; menu bar item \(MenuBarPreferences.isMenuBarItemShown ? "shown" : "hidden"), hide the Dock icon without windows: \(MenuBarPreferences.shared.hidesDockIconWhenWindowClosed)")
+        expectWindow("launch", mainWindow())
+        let pages: [AppSection] = [.uninstaller, .updates, .dashboard, .duplicates, .storage]
+        for cycle in 1...cycles {
+            let page = pages[(cycle - 1) % pages.count]
+            environment.navigation.open(page)
+            if page == .uninstaller {
+                environment.uninstaller.loadIfNeeded()
+                await ScreenshotAutomation.wait(timeout: .seconds(60)) { environment.uninstaller.hasLoaded }
+                if let app = environment.uninstaller.visibleApps.first { environment.uninstaller.selection = [app.id] }
+            }
+            await settle()
+            mainWindow()?.performClose(nil)
+            await settle()
+            expectNoWindows("cycle \(cycle): closed the main window on \(page)")
+            if cycle.isMultiple(of: 2) {
+                // A Dock click (or opening the app again) while no window is open.
+                let handled = NSApp.delegate?.applicationShouldHandleReopen?(NSApp, hasVisibleWindows: false)
+                if handled == nil { AppPresence.shared.showMainWindow() }
+                await settle()
+                expectWindow("cycle \(cycle): reopened from the Dock", mainWindow())
+            } else {
+                // The menu bar hub's "Open Mac Cleaner".
+                AppPresence.shared.open(windowID: AppWindowID.main)
+                await settle()
+                expectWindow("cycle \(cycle): reopened from the menu bar", mainWindow())
+            }
+        }
+
+        mainWindow()?.performClose(nil)
+        await settle()
+        expectNoWindows("closed the main window before About")
+        await exerciseMenuBarPopover()
+        AppPresence.shared.open(windowID: AppWindowID.about)
+        await settle()
+        let about = NSApp.windows.first { $0.title == "About Mac Cleaner" && $0.isVisible }
+        expectWindow("About opened from the menu bar", about)
+        about?.performClose(nil)
+        await settle()
+        expectNoWindows("closed About")
+
+        AppPresence.shared.bringToFront()
+        openSettings()
+        await settle()
+        let settings = ScreenshotAutomation.settingsWindow()
+        expectWindow("Settings opened from the menu bar", settings)
+        settings?.performClose(nil)
+        await settle()
+        expectNoWindows("closed Settings")
+
+        AppPresence.shared.open(windowID: AppWindowID.main)
+        await settle()
+        expectWindow("reopened the main window at the end", mainWindow())
+        environment.uninstaller.selection = []
+        environment.navigation.open(.dashboard)
+        await settle()
+        log("done: \(checks) checks, \(failures) failed")
+        NSApp.terminate(nil)
+    }
+
+    private static func mainWindow() -> NSWindow? {
+        NSApp.windows.first { $0.identifier?.rawValue.hasPrefix(AppWindowID.main) == true && $0.isVisible }
+    }
+
+    /// Opens and closes the menu bar popover by clicking the status item, when the status
+    /// item's button lives in this process.
+    private static func exerciseMenuBarPopover() async {
+        guard MenuBarPreferences.isMenuBarItemShown else { return }
+        func buttons(in view: NSView) -> [NSStatusBarButton] {
+            ((view as? NSStatusBarButton).map { [$0] } ?? []) + view.subviews.flatMap(buttons(in:))
+        }
+        let button = NSApp.windows.compactMap(\.contentView).flatMap(buttons(in:)).first
+        guard let button else {
+            log("     the status item's button isn't in this process; the popover wasn't clicked")
+            return
+        }
+        let before = Set(NSApp.windows.filter(\.isVisible).map(ObjectIdentifier.init))
+        button.performClick(nil)
+        await settle(2)
+        guard let popover = NSApp.windows.first(where: { $0.isVisible && !before.contains(ObjectIdentifier($0)) && !String(describing: type(of: $0)).hasPrefix("NSStatusBar") }) else {
+            // SwiftUI opens the popover from real mouse events; a programmatic click doesn't.
+            log("     clicking the status item from inside the app didn't open the popover; not checked")
+            return
+        }
+        log("     menu bar popover opened: \(type(of: popover)) \(popover.frame.size)")
+        button.performClick(nil)
+        await settle()
+        check(!popover.isVisible, "menu bar popover closed")
+        expectNoWindows("menu bar popover closed")
+    }
+
+    /// The Dock icon hides only while the menu bar item is shown and the person wants that.
+    private static var expectedPolicyWithoutWindows: NSApplication.ActivationPolicy {
+        MenuBarPreferences.isMenuBarItemShown && MenuBarPreferences.shared.hidesDockIconWhenWindowClosed ? .accessory : .regular
+    }
+
+    private static func expectNoWindows(_ step: String) {
+        let open = NSApp.windows.filter(AppPresence.isAppWindow).map(\.title)
+        check(open.isEmpty, "\(step): no app windows open \(open)")
+        let expected = expectedPolicyWithoutWindows
+        check(NSApp.activationPolicy() == expected, "\(step): Dock icon policy \(name(NSApp.activationPolicy())), expected \(name(expected))")
+    }
+
+    private static func expectWindow(_ step: String, _ window: NSWindow?) {
+        check(window?.isVisible == true, "\(step): window '\(window?.title ?? "none")' visible")
+        check(NSApp.activationPolicy() == .regular, "\(step): Dock icon policy \(name(NSApp.activationPolicy())), expected regular")
+        log("     \(step): app active \(NSApp.isActive), key window '\(NSApp.keyWindow?.title ?? "-")'")
+    }
+
+    private static func name(_ policy: NSApplication.ActivationPolicy) -> String {
+        switch policy {
+        case .regular: return "regular"
+        case .accessory: return "accessory"
+        case .prohibited: return "prohibited"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private static func check(_ condition: Bool, _ text: String) {
+        checks += 1
+        if !condition { failures += 1 }
+        log("\(condition ? "ok  " : "FAIL") \(text)")
+    }
+
+    private static func log(_ text: String) {
+        FileHandle.standardError.write(Data("EXERCISE \(text)\n".utf8))
+    }
+
+    private static func settle(_ seconds: Double = 1.2) async {
+        try? await Task.sleep(for: .seconds(seconds))
+    }
+}
+
 #endif

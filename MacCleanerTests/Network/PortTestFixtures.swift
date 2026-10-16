@@ -75,6 +75,37 @@ struct PortTestError: Error, CustomStringConvertible {
     init(_ description: String) { self.description = description }
 }
 
+/// For a server that never showed up: whether anything accepts connections on `port`, what the kernel's
+/// listener list says about it, and which of `processes` (the test's own) are still running.
+func portVisibilityReport(port: UInt16, processes: [PortProcessBasic]) -> String {
+    var parts: [String] = []
+    let fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+    if fd >= 0 {
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let connected = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
+            }
+        }
+        close(fd)
+        parts.append(connected ? "127.0.0.1:\(port) accepts connections" : "nothing accepts connections on 127.0.0.1:\(port)")
+    }
+    if let listeners = PortSysProc.systemTCPListeners() {
+        let owners = listeners.filter { $0.port == port }.map { String($0.pid) }
+        parts.append(owners.isEmpty ? "the kernel's listener list (\(listeners.count) sockets) has nothing on it"
+                                    : "the kernel's listener list shows it owned by pid \(owners.joined(separator: ", "))")
+    } else {
+        parts.append("the kernel's listener list can't be read")
+    }
+    let running = processes.map { "\($0.pid) \($0.comm)" }
+    parts.append(running.isEmpty ? "none of the test's processes is running" : "running: " + running.joined(separator: ", "))
+    return parts.joined(separator: "; ")
+}
+
 /// Every suite that starts processes or opens sockets runs inside this one, one test at a time: they all see the
 /// same process table, so one test's server closing would otherwise show up in another test's scan.
 @Suite(.serialized) enum PortLiveProcessTests {}

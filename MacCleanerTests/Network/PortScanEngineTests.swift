@@ -233,7 +233,9 @@ final class PortThrowawayServerTree {
             Thread.sleep(forTimeInterval: 0.05)
         }
         let output = (try? String(contentsOfFile: container + "/server-output.log", encoding: .utf8)).map { String($0.suffix(800)) } ?? ""
-        throw PortTestError("the throwaway server did not start listening on :\(port)" + (output.isEmpty ? " (no output)" : "; output: " + output))
+        let processes = PortProcessTable(processes: PortSysProc.allProcesses()).descendants(of: makePID)
+        throw PortTestError("the throwaway server did not start listening on :\(port)" + (output.isEmpty ? " (no output)" : "; output: " + output)
+                            + "; " + portVisibilityReport(port: port, processes: processes))
     }
 
     func waitUntilGone(_ pid: pid_t, timeout: TimeInterval = 5) throws {

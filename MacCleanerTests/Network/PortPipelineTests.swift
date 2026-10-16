@@ -528,7 +528,9 @@ final class PortPipelineSandbox: @unchecked Sendable {
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
-        throw PortTestError("the throwaway server did not start listening on :\(port)" + outputTail())
+        let processes = PortSysProc.allProcesses().filter { groups.contains($0.pgid) }
+        throw PortTestError("the throwaway server did not start listening on :\(port)" + outputTail()
+                            + "; " + portVisibilityReport(port: port, processes: processes))
     }
 
     /// A running process started here whose command line contains `text`.

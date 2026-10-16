@@ -23,6 +23,8 @@ final class AppEnvironment {
     let startup: StartupViewModel
     let performance: PerformanceViewModel
     let security: SecurityViewModel
+    let antivirus: AntivirusViewModel
+    let network: NetworkViewModel
     let automation: AutomationViewModel
     let history: HistoryViewModel
 
@@ -43,6 +45,8 @@ final class AppEnvironment {
         startup = StartupViewModel(services: services)
         performance = PerformanceViewModel(services: services, monitor: monitor)
         security = SecurityViewModel(services: services)
+        antivirus = AntivirusViewModel(services: services)
+        network = NetworkViewModel(services: services)
         automation = AutomationViewModel(services: services, runnerFactory: { AppEnvironment.makeAutomationRunner() })
         history = HistoryViewModel(services: services)
     }
@@ -91,6 +95,8 @@ final class AppEnvironment {
         uninstaller.navigate = open
         updates.navigate = open
         performance.openSection = open
+        antivirus.navigate = open
+        network.navigate = open
         NotificationService.shared.onOpenSection = open
     }
 

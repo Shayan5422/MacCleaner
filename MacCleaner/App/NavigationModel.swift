@@ -34,11 +34,11 @@ final class NavigationModel {
 
     static let groups: [Group] = [
         Group(title: "Overview", sections: [.dashboard, .smartScan]),
+        Group(title: "Protection", sections: [.antivirus, .security, .network]),
         Group(title: "Cleanup", sections: [.systemJunk, .privacy, .developer]),
         Group(title: "Storage", sections: [.storage, .duplicates, .cloud]),
         Group(title: "Applications", sections: [.uninstaller, .updates, .startup]),
-        Group(title: "System", sections: [.performance, .security]),
-        Group(title: "Automation", sections: [.automation, .history]),
+        Group(title: "System", sections: [.performance, .automation, .history]),
     ]
 
     /// ⌘-number shortcuts for the most used sections.

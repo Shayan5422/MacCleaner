@@ -18,6 +18,8 @@ extension AppSection {
         case .startup: return Color(red: 0.36, green: 0.40, blue: 0.92)
         case .performance: return Color(red: 0.95, green: 0.29, blue: 0.53)
         case .security: return Color(red: 0.18, green: 0.68, blue: 0.40)
+        case .antivirus: return Color(red: 0.86, green: 0.24, blue: 0.27)
+        case .network: return Color(red: 0.10, green: 0.62, blue: 0.80)
         case .automation: return Color(red: 0.92, green: 0.62, blue: 0.10)
         case .history: return Color(red: 0.50, green: 0.53, blue: 0.60)
         }

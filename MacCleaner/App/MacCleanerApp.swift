@@ -110,6 +110,8 @@ struct RootView: View {
         case .startup: StartupView(model: environment.startup)
         case .performance: PerformanceView(model: environment.performance)
         case .security: SecurityView(model: environment.security)
+        case .antivirus: AntivirusView(model: environment.antivirus)
+        case .network: NetworkView(model: environment.network)
         case .automation: AutomationView(model: environment.automation)
         case .history: HistoryView(model: environment.history)
         }

@@ -8,7 +8,7 @@ import Foundation
 /// and items nested inside other items are excluded from totals.
 struct SmartScanMerger {
     /// Earlier areas win when the same item appears in several areas.
-    static let priority: [SmartScanArea] = [.junk, .developer, .privacy, .leftovers, .duplicates, .largeFiles, .startup, .security]
+    static let priority: [SmartScanArea] = [.junk, .developer, .privacy, .leftovers, .duplicates, .largeFiles, .startup, .security, .malware]
 
     struct Merged: Sendable {
         var candidates: [CleanupCandidate]

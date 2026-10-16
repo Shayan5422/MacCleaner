@@ -7,6 +7,7 @@ enum AppSection: String, CaseIterable, Identifiable, Sendable, Codable, Hashable
     case storage, duplicates, cloud
     case uninstaller, updates, startup
     case performance, security
+    case antivirus, network
     case automation, history
 
     var id: String { rawValue }
@@ -26,6 +27,8 @@ enum AppSection: String, CaseIterable, Identifiable, Sendable, Codable, Hashable
         case .startup: return "Startup Items"
         case .performance: return "Performance"
         case .security: return "Security"
+        case .antivirus: return "Antivirus"
+        case .network: return "Ports & Network"
         case .automation: return "Automation"
         case .history: return "History"
         }
@@ -46,6 +49,8 @@ enum AppSection: String, CaseIterable, Identifiable, Sendable, Codable, Hashable
         case .startup: return "power.circle"
         case .performance: return "waveform.path.ecg"
         case .security: return "lock.shield"
+        case .antivirus: return "shield.lefthalf.filled"
+        case .network: return "network"
         case .automation: return "clock.arrow.2.circlepath"
         case .history: return "clock.arrow.circlepath"
         }
@@ -174,7 +179,7 @@ enum FindingSeverity: Int, Sendable, Codable, Comparable, CaseIterable, Hashable
 
 /// Areas covered by Smart Scan.
 enum SmartScanArea: String, CaseIterable, Sendable, Codable, Identifiable, Hashable {
-    case junk, leftovers, largeFiles, duplicates, startup, security, privacy, developer
+    case junk, leftovers, largeFiles, duplicates, startup, security, malware, privacy, developer
 
     var id: String { rawValue }
 
@@ -186,6 +191,7 @@ enum SmartScanArea: String, CaseIterable, Sendable, Codable, Identifiable, Hasha
         case .duplicates: return "Duplicates"
         case .startup: return "Startup Items"
         case .security: return "Security"
+        case .malware: return "Virus Scan"
         case .privacy: return "Privacy"
         case .developer: return "Developer Caches"
         }
@@ -199,6 +205,7 @@ enum SmartScanArea: String, CaseIterable, Sendable, Codable, Identifiable, Hasha
         case .duplicates: return "square.on.square.fill"
         case .startup: return "power.circle.fill"
         case .security: return "lock.shield.fill"
+        case .malware: return "ladybug.fill"
         case .privacy: return "hand.raised.fill"
         case .developer: return "hammer.fill"
         }
@@ -212,6 +219,7 @@ enum SmartScanArea: String, CaseIterable, Sendable, Codable, Identifiable, Hasha
         case .duplicates: return .duplicates
         case .startup: return .startup
         case .security: return .security
+        case .malware: return .antivirus
         case .privacy: return .privacy
         case .developer: return .developer
         }

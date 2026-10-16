@@ -230,6 +230,7 @@ extension SmartScanArea {
         case .privacy: return "Browsers rebuild caches automatically."
         case .developer: return "Rebuilt or re-downloaded by your developer tools when needed."
         case .startup, .security: return "Review the recommendation before acting."
+        case .malware: return "Threats are moved to the Virus Chest, where they can't run and can be restored."
         }
     }
 }

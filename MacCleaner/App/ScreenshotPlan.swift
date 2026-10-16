@@ -47,6 +47,13 @@ enum ScreenshotPlan {
             }),
             .init(name: "automation", section: .automation),
             .init(name: "cloud", section: .cloud, settle: .seconds(4)),
+            .init(name: "updates", section: .updates, prepare: { environment in
+                environment.updates.loadIfNeeded()
+                await ScreenshotAutomation.wait { environment.updates.hasLoaded }
+                environment.updates.checkForUpdates()
+                await ScreenshotAutomation.wait(timeout: .seconds(240)) { !environment.updates.isChecking }
+            }, settle: .seconds(3)),
+            .init(name: "history", section: .history, settle: .seconds(2)),
         ]
     }
 }

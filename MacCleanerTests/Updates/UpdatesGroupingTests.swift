@@ -51,6 +51,26 @@ enum UpdatesTestRows {
 
 @MainActor
 struct UpdatesGroupingTests {
+    @Test func sameUpdatesArentPostedTwice() throws {
+        let rows = [
+            UpdatesTestRows.row("Writer", status: .updateAvailable, latest: "2.0"),
+            UpdatesTestRows.row("Viewer", status: .updateAvailable, latest: "3.0"),
+        ]
+        let model = try UpdatesTestRows.model(rows: rows)
+        let log = ProtectionEventLog(directory: nil)
+        model.eventLog = log
+        model.postUpdatesEvent(rows)
+        model.postUpdatesEvent(rows)
+        #expect(log.events.count == 1)
+        #expect(log.events.first?.title == "2 app updates available")
+        #expect(log.events.first?.detail == "Viewer, Writer")
+
+        // A different set is news again.
+        model.postUpdatesEvent(Array(rows.prefix(1)))
+        #expect(log.events.count == 2)
+        #expect(log.events.first?.title == "1 app update available")
+    }
+
     @Test func rowsLandInTheRightSection() {
         #expect(UpdatesViewModel.group(of: UpdatesTestRows.row("A", status: .updateAvailable)) == .updates)
         #expect(UpdatesViewModel.group(of: UpdatesTestRows.row("A", status: .incompatible)) == .updates)

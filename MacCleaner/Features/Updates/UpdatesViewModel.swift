@@ -640,15 +640,19 @@ final class UpdatesViewModel {
         postUpdatesEvent(updates)
     }
 
-    /// "3 app updates available" in the Activity feed.
-    private func postUpdatesEvent(_ updates: [UpdatesAppRow]) {
-        guard !updates.isEmpty else { return }
+    /// "3 app updates available" in the Activity feed, once per change: checking again
+    /// and finding the same updates isn't news.
+    func postUpdatesEvent(_ updates: [UpdatesAppRow]) {
+        guard !updates.isEmpty, let eventLog else { return }
         let names = Self.sorted(updates, by: .name).map(\.name)
         let listed = names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " and \(names.count - 3) more" : "")
-        eventLog?.post(ProtectionEvent(
+        let title = "\(updates.count) app update\(updates.count == 1 ? "" : "s") available"
+        let previous = eventLog.events.first { $0.kind == .appUpdateAvailable && $0.title.hasSuffix(" available") && !$0.title.hasPrefix("Mac Cleaner") }
+        if previous?.title == title, previous?.detail == listed { return }
+        eventLog.post(ProtectionEvent(
             kind: .appUpdateAvailable,
             severity: .recommendation,
-            title: "\(updates.count) app update\(updates.count == 1 ? "" : "s") available",
+            title: title,
             detail: listed,
             section: .updates
         ))

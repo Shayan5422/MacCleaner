@@ -18,7 +18,9 @@ struct SecurityPostureSection: View {
             if let posture = model.posture {
                 SecurityPostureOverview(posture: posture)
                 // Five protections: one row when they fit, otherwise 3 + 2 that fill the width.
-                BalancedGrid(minimumItemWidth: 168, spacing: 10) {
+                // 210 points keeps a title, its status badge and the two buttons of a protection
+                // that's off ("Open Settings", "How to Turn On") readable.
+                BalancedGrid(minimumItemWidth: 210, spacing: 10) {
                     ForEach(posture.protections) { protection in
                         SecurityProtectionTile(protection: protection, model: model)
                     }

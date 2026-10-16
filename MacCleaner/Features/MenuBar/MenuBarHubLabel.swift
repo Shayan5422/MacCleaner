@@ -4,8 +4,9 @@ import SwiftUI
 /// The menu bar item: Mac Cleaner's glyph, an optional value (open ports, CPU or free
 /// disk space) and a dot when something needs attention.
 ///
-/// Live CPU sampling only runs while the label shows CPU (`isMenuBarExtraActive`);
-/// free space is read once a minute while it's shown.
+/// Live sampling (`isMenuBarExtraActive`) only runs while the label shows CPU or
+/// performance alerts are on (they're evaluated with each sample); free space is read
+/// once a minute while it's shown.
 struct MenuBarHubLabel: View {
     let environment: AppEnvironment
     var preferences: MenuBarPreferences = .shared
@@ -22,11 +23,11 @@ struct MenuBarHubLabel: View {
             .accessibilityLabel(accessibilityText(style: style, status: status, alert: alert))
             .onAppear {
                 AppPresence.shared.openWindowAction = openWindow
-                environment.monitor.isMenuBarExtraActive = style == .cpu
+                environment.monitor.isMenuBarExtraActive = needsSampling
             }
             .onDisappear { environment.monitor.isMenuBarExtraActive = false }
-            .onChange(of: style) { _, newStyle in
-                environment.monitor.isMenuBarExtraActive = newStyle == .cpu
+            .onChange(of: needsSampling) { _, needed in
+                environment.monitor.isMenuBarExtraActive = needed
             }
             .task(id: style) {
                 guard style == .freeDisk else { return }
@@ -35,6 +36,10 @@ struct MenuBarHubLabel: View {
                     try? await Task.sleep(for: .seconds(60))
                 }
             }
+    }
+
+    private var needsSampling: Bool {
+        preferences.labelStyle == .cpu || environment.services.settings.performanceAlertsEnabled
     }
 
     private func text(for style: MenuBarLabelStyle, status: MenuBarStatus) -> String? {

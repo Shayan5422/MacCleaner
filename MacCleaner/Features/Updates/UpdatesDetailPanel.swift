@@ -456,6 +456,8 @@ struct UpdatesUpdateAllSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        // As wide as the other cards in the sheet, whatever the length of the names.
+        .frame(maxWidth: .infinity, alignment: .leading)
         .card(padding: 12)
     }
 }

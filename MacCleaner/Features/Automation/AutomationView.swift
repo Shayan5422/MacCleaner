@@ -153,6 +153,21 @@ struct AutomationView: View {
                 .disabled(!model.configuration.junkAlertEnabled)
             Divider()
             Toggle("Include a security scan with each scheduled run", isOn: $model.configuration.securityScanEnabled)
+            Divider()
+            Toggle(isOn: $model.configuration.updatesVirusDefinitions) {
+                VStack(alignment: .leading) {
+                    Text("Update virus definitions in the background")
+                    Text("Checks at most every 4 hours, even when Mac Cleaner isn't open. Install the definitions on the Antivirus page first.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Toggle(isOn: $model.configuration.runsVirusScan) {
+                VStack(alignment: .leading) {
+                    Text("Quick virus scan on each scheduled run")
+                    Text("Skips Downloads and Desktop, which macOS protects with a permission prompt. Threats go to the Virus Chest only when automatic quarantine is on in Antivirus settings; otherwise you're notified.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 
@@ -232,6 +247,7 @@ struct AutomationView: View {
     private func symbol(for outcome: AutomationRunRecord.Outcome) -> String {
         switch outcome {
         case .cleaned: return "checkmark.circle.fill"
+        case .updated: return "arrow.triangle.2.circlepath.circle.fill"
         case .dryRun: return "doc.text.magnifyingglass"
         case .notified, .announced: return "bell.fill"
         case .skipped, .deferred: return "forward.fill"
@@ -242,7 +258,7 @@ struct AutomationView: View {
 
     private func tint(for outcome: AutomationRunRecord.Outcome) -> Color {
         switch outcome {
-        case .cleaned: return .green
+        case .cleaned, .updated: return .green
         case .failed: return .orange
         case .notified, .announced: return .blue
         default: return .secondary

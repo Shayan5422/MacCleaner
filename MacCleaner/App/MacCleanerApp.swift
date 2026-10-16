@@ -80,7 +80,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// While the menu bar item is shown, closing the window keeps Mac Cleaner running there.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        !MenuBarPreferences.isMenuBarItemShown
+        // Real-time protection also needs Mac Cleaner to keep running.
+        let protects = AntivirusSettings.keepsRunningForProtection(definitionsInstalled: AVEngineHolder.shared.hasDefinitions)
+        return !(MenuBarPreferences.isMenuBarItemShown || protects)
     }
 
     /// A Dock click or opening the app again shows the main window.
@@ -157,6 +159,7 @@ struct RootView: View {
         }) {
             OnboardingView(services: environment.services)
         }
+        .antivirusAlerts(environment.antivirus)
         #if DEBUG
         .task {
             if ScreenshotAutomation.outputDirectory != nil {
@@ -175,7 +178,7 @@ struct RootView: View {
     @ViewBuilder
     private func detail(for section: AppSection) -> some View {
         switch section {
-        case .dashboard: DashboardView(model: environment.dashboard)
+        case .dashboard: DashboardView(model: environment.dashboard, antivirus: environment.antivirus)
         case .smartScan: SmartScanView(model: environment.smartScan)
         case .systemJunk: SystemJunkView(model: environment.systemJunk)
         case .privacy: PrivacyView(model: environment.privacy)
@@ -188,7 +191,7 @@ struct RootView: View {
         case .startup: StartupView(model: environment.startup, startupGuard: environment.guardian.startupGuard)
         case .performance: PerformanceView(model: environment.performance)
         case .security: SecurityView(model: environment.security)
-        case .antivirus: AntivirusView(model: environment.antivirus)
+        case .antivirus: AntivirusView(model: environment.antivirus, webShield: environment.guardian.webShield)
         case .network: NetworkView(model: environment.network)
         case .automation: AutomationView(model: environment.automation)
         case .history: HistoryView(model: environment.history)

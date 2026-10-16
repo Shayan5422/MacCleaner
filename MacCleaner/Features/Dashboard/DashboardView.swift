@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @Bindable var model: DashboardViewModel
+    var antivirus: AntivirusViewModel
 
     var body: some View {
         PageScroll {
@@ -28,6 +29,7 @@ struct DashboardView: View {
             }
 
             BalancedGrid(minimumItemWidth: 300, spacing: 16) {
+                AntivirusDashboardCard(model: antivirus)
                 securityCard
                 activityCard
             }

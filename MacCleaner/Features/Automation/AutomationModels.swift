@@ -70,6 +70,21 @@ struct AutomationConfiguration: Codable, Sendable, Equatable {
     var junkAlertEnabled = false
     var junkAlertGB = 5
     var securityScanEnabled = false
+    /// Antivirus options. Optional so configurations saved by earlier versions still decode.
+    var antivirusDefinitionsUpdate: Bool?
+    var antivirusQuickScan: Bool?
+
+    /// "Update virus definitions in the background" (at most every 4 hours, on each agent check).
+    var updatesVirusDefinitions: Bool {
+        get { antivirusDefinitionsUpdate ?? false }
+        set { antivirusDefinitionsUpdate = newValue }
+    }
+
+    /// "Quick virus scan on each scheduled run".
+    var runsVirusScan: Bool {
+        get { antivirusQuickScan ?? false }
+        set { antivirusQuickScan = newValue }
+    }
 }
 
 /// Bookkeeping written by the runner.
@@ -78,6 +93,7 @@ struct AutomationState: Codable, Sendable, Equatable {
     var lastThresholdRun: Date?
     var lastJunkCheck: Date?
     var lastSecurityScan: Date?
+    var lastVirusScan: Date?
     /// A cleanup announced with "notify before cleaning", waiting for the next check.
     var pendingCleanupSince: Date?
     var pendingTrigger: AutomationRunRecord.Trigger?
@@ -87,7 +103,7 @@ struct AutomationState: Codable, Sendable, Equatable {
 /// One automatic run, shown in the Automation history.
 struct AutomationRunRecord: Codable, Sendable, Identifiable, Hashable {
     enum Trigger: String, Codable, Sendable {
-        case schedule, storageThreshold, manual, junkCheck
+        case schedule, storageThreshold, manual, junkCheck, virusDefinitions
 
         var title: String {
             switch self {
@@ -95,12 +111,13 @@ struct AutomationRunRecord: Codable, Sendable, Identifiable, Hashable {
             case .storageThreshold: return "Low storage"
             case .manual: return "Run manually"
             case .junkCheck: return "Junk check"
+            case .virusDefinitions: return "Virus definitions"
             }
         }
     }
 
     enum Outcome: String, Codable, Sendable {
-        case cleaned, dryRun, notified, announced, skipped, deferred, failed, nothingToDo
+        case cleaned, dryRun, notified, announced, skipped, deferred, failed, nothingToDo, updated
     }
 
     var id = UUID()

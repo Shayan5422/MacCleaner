@@ -3,7 +3,7 @@ import OSLog
 
 /// Areas of the app that write to the activity log.
 enum LogCategory: String, Codable, Sendable, CaseIterable {
-    case scan, cleanup, uninstall, storage, duplicates, startup, monitor, security, privacy, cloud, updates, developer, automation, permissions, app
+    case scan, cleanup, uninstall, storage, duplicates, startup, monitor, security, antivirus, network, privacy, cloud, updates, developer, automation, permissions, app
 
     var title: String {
         switch self {
@@ -15,6 +15,8 @@ enum LogCategory: String, Codable, Sendable, CaseIterable {
         case .startup: return "Startup"
         case .monitor: return "Monitor"
         case .security: return "Security"
+        case .antivirus: return "Antivirus"
+        case .network: return "Ports & Network"
         case .privacy: return "Privacy"
         case .cloud: return "Cloud"
         case .updates: return "Updates"

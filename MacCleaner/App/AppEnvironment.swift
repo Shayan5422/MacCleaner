@@ -62,6 +62,7 @@ final class AppEnvironment {
             DuplicatesSmartScanProvider(),
             StartupSmartScanProvider(),
             SecuritySmartScanProvider(),
+            AntivirusSmartScanProvider(),
             PrivacySmartScanProvider(),
             DeveloperSmartScanProvider(),
         ]
@@ -80,6 +81,7 @@ final class AppEnvironment {
             let report = await SecurityScanner(loginItems: .skip, includesDownloads: false).scan { _, _ in }
             return AutomationSecurityResult(summary: report.summary, alertCount: report.threatCount + report.suspiciousCount)
         }
+        runner.antivirus = AntivirusHeadless.automationHook()
         return runner
     }
 
@@ -89,12 +91,19 @@ final class AppEnvironment {
     @ObservationIgnored private var startedBackgroundServices = false
 
     /// Starts the work that keeps running in the menu bar while no window is open: the port watch and
-    /// Network Shield, and Guardian (Startup Guard, Web Shield). Called at launch; idempotent.
+    /// Network Shield, the antivirus (definitions updates, File and Download Shields) and Guardian
+    /// (Startup Guard, Web Shield). Called at launch; idempotent.
     func startBackgroundServices() {
         connectNavigation()
         guard !startedBackgroundServices else { return }
         startedBackgroundServices = true
         network.start()
+        antivirus.start()
+        guardian.startupScanHook = { path in
+            // New startup items' programs are scanned with the antivirus engine once definitions are loaded.
+            guard let result = await AVEngineHolder.shared.scanFile(at: path) else { return nil }
+            return GuardianScanVerdict(detections: result.detections.map(\.signatureName), engine: "ClamAV signatures")
+        }
         guardian.start()
     }
 

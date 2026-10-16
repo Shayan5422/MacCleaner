@@ -44,18 +44,29 @@ extension MenuBarStatus {
     /// `environment.network` (open project ports) and `environment.antivirus` (protection).
     @MainActor
     static func current(_ environment: AppEnvironment) -> MenuBarStatus {
-        MenuBarStatus(openPortCount: environment.network.openProjectPortCount)
+        MenuBarStatus(openPortCount: environment.network.openProjectPortCount,
+                      protectionState: protection(environment.antivirus))
+    }
+
+    @MainActor
+    private static func protection(_ antivirus: AntivirusViewModel) -> MenuBarProtectionState {
+        if antivirus.isScanning { return .scanning }
+        switch antivirus.protectionState {
+        case .threats: return .threats(antivirus.activeThreatCount)
+        case .notSetUp: return .attention("Virus definitions aren't downloaded yet")
+        case .attention: return .attention(antivirus.attentionReasons.first ?? "Needs attention")
+        case .protected: return antivirus.isRealTimeProtectionOn ? .protected : .off
+        }
     }
 }
 
-/// Real-time protection, threats and Quick Scan. Placeholder until integration.
+/// Real-time protection, threats and Quick Scan (Antivirus).
 struct MenuBarProtectionSlot: View {
     let environment: AppEnvironment
 
     var body: some View {
-        MenuBarCard(title: "Protection", symbol: "shield.lefthalf.filled", tint: AppSection.antivirus.tint) {
-            MenuBarOpenSectionRow(text: "Scan for viruses and check what's protected.", section: .antivirus, environment: environment)
-        }
+        AntivirusMenuBarSection(model: environment.antivirus)
+            .menuBarCardStyle()
     }
 }
 

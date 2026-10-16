@@ -7,6 +7,22 @@ struct AutomationSecurityResult: Sendable {
     var alertCount: Int
 }
 
+/// What the background agent asks the Antivirus module to do.
+struct AutomationAntivirusRequest: Sendable, Equatable {
+    var updateDefinitions: Bool
+    var quickScan: Bool
+}
+
+/// Reported by the Antivirus module. It posts its own notifications (threats found or moved to
+/// the Virus Chest); the runner only records the run.
+struct AutomationAntivirusResult: Sendable {
+    var summary: String
+    /// Threats found by the quick scan.
+    var alertCount: Int
+    var definitionsUpdated: Bool
+    var failed: Bool
+}
+
 /// Performs automatic cleaning. Used both by the background agent (headless,
 /// launched by launchd) and by "Run Now" in the app.
 ///
@@ -18,6 +34,8 @@ struct AutomationRunner: Sendable {
     /// Providers for the non-junk automation categories, keyed by `AutomationCategory` id.
     var extraProviders: [String: any SmartScanProvider] = [:]
     var securityScan: (@Sendable () async -> AutomationSecurityResult?)?
+    /// Virus definition updates and scheduled quick virus scans (wired by the app to the Antivirus module).
+    var antivirus: (@Sendable (AutomationAntivirusRequest) async -> AutomationAntivirusResult?)?
     var notifications: NotificationService = .shared
     var logger: ActivityLogger = .shared
     var historyStore = HistoryStore()
@@ -43,6 +61,13 @@ struct AutomationRunner: Sendable {
                 records.append(record)
             }
             return records
+        }
+
+        // Virus definitions are checked on every agent run; the Antivirus updater itself limits
+        // network checks to every 4 hours and never downloads a database more than once a day.
+        if configuration.updatesVirusDefinitions,
+           let record = await runAntivirus(AutomationAntivirusRequest(updateDefinitions: true, quickScan: false)) {
+            records.append(record)
         }
 
         // 1. A cleanup announced earlier is due once the grace period has passed.
@@ -74,6 +99,13 @@ struct AutomationRunner: Sendable {
             if configuration.securityScanEnabled, let result = await runSecurityScan() {
                 state = store.loadState()
                 state.lastSecurityScan = now
+                store.save(state)
+                records.append(result)
+            }
+            if configuration.runsVirusScan,
+               let result = await runAntivirus(AutomationAntivirusRequest(updateDefinitions: false, quickScan: true)) {
+                state = store.loadState()
+                state.lastVirusScan = now
                 store.save(state)
                 records.append(result)
             }
@@ -258,6 +290,21 @@ struct AutomationRunner: Sendable {
         }
         let record = AutomationRunRecord(trigger: .schedule, outcome: result.alertCount > 0 ? .notified : .nothingToDo,
                                          itemCount: result.alertCount, message: "Security scan: \(result.summary)")
+        store.append(record)
+        return record
+    }
+
+    /// Records definition updates only when something changed or failed, so hourly checks don't fill the history.
+    private func runAntivirus(_ request: AutomationAntivirusRequest) async -> AutomationRunRecord? {
+        guard let antivirus, let result = await antivirus(request) else { return nil }
+        if request.quickScan {
+            let record = AutomationRunRecord(trigger: .schedule, outcome: result.failed ? .failed : (result.alertCount > 0 ? .notified : .nothingToDo),
+                                             itemCount: result.alertCount, message: "Virus scan: \(result.summary)")
+            store.append(record)
+            return record
+        }
+        guard result.definitionsUpdated || result.failed else { return nil }
+        let record = AutomationRunRecord(trigger: .virusDefinitions, outcome: result.failed ? .failed : .updated, message: result.summary)
         store.append(record)
         return record
     }

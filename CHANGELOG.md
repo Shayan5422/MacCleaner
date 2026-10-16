@@ -9,8 +9,9 @@ Mac Cleaner becomes the assistant that watches over your Mac: an antivirus with 
 ### Added
 - **Antivirus** with Mac Cleaner's own scanning engine for the free **ClamAV® signature databases** (about 3.6 million signatures: file hashes, body and logical signatures, PE section hashes) plus **abuse.ch MalwareBazaar** hashes.
   - Quick, Full and custom scans (files, folders, external drives, drag and drop), inside zip, gzip, tar and universal binaries, without ever downloading cloud-only files.
+  - **Quick Scan** checks running programs, startup items, apps, browser extensions and what arrived in Downloads and Desktop in the last 90 days, for Mac threats. Full, custom and drive scans check everything, including Windows and Linux threats.
   - Definitions verified with ClamAV's digital signatures before they're used, and updated automatically through ClamAV's own **freshclam** when it's installed (one click with Homebrew) or a built-in updater that follows ClamAV's rules (incremental CDIFF updates, rate limits).
-  - **Virus Chest**: threats are moved into a locked, obfuscated vault where they can't run, and can be restored or deleted.
+  - **Virus Chest**: threats are moved into a locked, obfuscated vault where they can't run, and can be restored or deleted. Only threats identified by ClamAV's signed definitions are moved automatically, never from inside an app; other matches wait for your decision.
   - **File Shield** scans new and changed files in Downloads, Desktop, Documents, the Applications folders and launch agent folders as they appear. **Download Shield** also checks where a download came from against abuse.ch URLhaus and ThreatFox.
   - Scan history, "Test Protection" with the EICAR test file, a Virus Scan area in Smart Scan, and an optional quick scan and definitions update with each scheduled automation run.
 - **Web Shield** warns within a minute when a browser opens a site that abuse.ch lists for spreading malware (Safari, Chrome, Edge, Brave, Arc, Vivaldi, Opera, Firefox). History stays on your Mac; only matches are kept.

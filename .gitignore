@@ -21,3 +21,6 @@ xcuserdata/
 *.dmg
 *.xcarchive
 *.profraw
+
+# Claude Code (local settings and agent worktrees)
+.claude/

@@ -75,6 +75,10 @@ struct AVFileScanResult: Sendable, Hashable {
     var sha256: String?
     /// An archive inside the file hit a size, depth or file-count limit, so it wasn't scanned completely.
     var limitsReached: Bool
+    /// Archive members that are encrypted (password-protected), so their contents couldn't be scanned.
+    var encryptedMembers = 0
+    /// Archive members compressed with a method the engine can't read (only stored and deflate are supported).
+    var unsupportedMembers = 0
 
     init(path: String, detections: [AVDetection] = [], skipped: AVSkipReason? = nil, bytesScanned: Int64 = 0, sha256: String? = nil, limitsReached: Bool = false) {
         self.path = path
@@ -138,6 +142,12 @@ struct AVDatabaseSummary: Sendable, Codable, Hashable {
     var logicalSignatureCount: Int
     /// Hashes from SHA-256 lists (MalwareBazaar, ThreatFox).
     var hashListCount: Int
+    /// Loaded / unsupported / ignored signatures per database file, with reasons.
+    var coverage: AVSignatureCoverage? = nil
+    /// How each ClamAV database was verified ("main": .signedContainer, "daily": .signedIndex...).
+    var clamavVerification: [String: ClamAVVerification]? = nil
+    /// The ClamAV functionality level of the engine that compiled the database.
+    var engineFunctionalityLevel: Int? = nil
 }
 
 /// Scans files. `AVEngine` conforms; tests and the scan coordinator can substitute fakes.

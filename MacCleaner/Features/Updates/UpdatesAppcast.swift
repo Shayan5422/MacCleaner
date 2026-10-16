@@ -15,6 +15,8 @@ struct UpdatesAppcastItem: Sendable, Hashable {
     var fullReleaseNotesURL: URL?
     /// `<link>`: the product or download page.
     var infoURL: URL?
+    /// `<description>`: release notes embedded in the feed (usually HTML).
+    var descriptionHTML: String?
     var downloadURL: URL?
     var publicationDate: Date?
     var isCritical = false
@@ -241,6 +243,8 @@ private final class AppcastParserDelegate: NSObject, XMLParserDelegate {
             current?.title = value.isEmpty ? nil : value
         case "link":
             current?.infoURL = URL(string: value)
+        case "description":
+            current?.descriptionHTML = value.isEmpty ? nil : String(value.prefix(200_000))
         case "pubDate":
             current?.publicationDate = UpdatesAppcast.parseDate(value)
         case "sparkle:version":

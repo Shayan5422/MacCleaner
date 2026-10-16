@@ -212,15 +212,15 @@ struct CloudResultsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(minimum: 150), spacing: 12, alignment: .top), count: 4), spacing: 12) {
+            TileRow {
                 StatTile(title: "In Your Cloud Folders", value: ByteFormatting.string(model.totalLogicalBytes),
-                         caption: "\(NumberFormatting.count(model.totalFileCount)) files", symbol: "icloud", tint: AppSection.cloud.tint)
+                         caption: "\(NumberFormatting.count(model.totalFileCount)) files", symbol: "icloud", tint: AppSection.cloud.tint, fillsHeight: true)
                 StatTile(title: "Stored on This Mac", value: ByteFormatting.string(model.totalLocalBytes),
-                         caption: "Downloaded copies", symbol: "internaldrive", tint: AppSection.storage.tint)
+                         caption: "Downloaded copies", symbol: "internaldrive", tint: AppSection.storage.tint, fillsHeight: true)
                 StatTile(title: "Cloud-Only", value: ByteFormatting.string(model.totalCloudOnlyBytes),
-                         caption: "\(NumberFormatting.count(model.totalCloudOnlyCount)) files", symbol: "icloud.and.arrow.up", tint: .secondary)
+                         caption: "\(NumberFormatting.count(model.totalCloudOnlyCount)) files", symbol: "icloud.and.arrow.up", tint: .secondary, fillsHeight: true)
                 StatTile(title: "Could Be Freed", value: ByteFormatting.string(recoverableBytes),
-                         caption: "By removing downloads", symbol: "sparkles", tint: .green)
+                         caption: "By removing downloads", symbol: "sparkles", tint: .green, fillsHeight: true)
             }
 
             if model.groups.contains(where: { $0.summaries.contains { $0.unreadableFolders > 0 || $0.errorMessage != nil } }) {

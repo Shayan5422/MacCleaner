@@ -34,6 +34,16 @@ struct UninstallerView: View {
 /// preview sheet and the cleanup flow's sheets attach to different views.
 private struct UninstallerMainContent: View {
     @Bindable var model: UninstallerViewModel
+    /// The selection whose details the person closed; selecting other apps shows them again.
+    @State private var dismissedSelection: Set<UninstallerApp.ID>?
+
+    /// Details follow the selection, in an inspector that's only there when something is selected.
+    private var showsInspector: Binding<Bool> {
+        Binding(
+            get: { !model.selection.isEmpty && model.filter != .leftovers && dismissedSelection != model.selection },
+            set: { shown in dismissedSelection = shown ? nil : model.selection }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -66,7 +76,18 @@ private struct UninstallerMainContent: View {
                         .help(model.filter == .leftovers ? "Scan for leftovers again" : "Reload the list of apps")
                         .accessibilityLabel("Refresh")
                         .disabled(model.isLoading)
+                        if model.filter != .leftovers {
+                            Button {
+                                showsInspector.wrappedValue.toggle()
+                            } label: {
+                                Image(systemName: "sidebar.right")
+                            }
+                            .help(showsInspector.wrappedValue ? "Hide details" : "Show details of the selected app")
+                            .accessibilityLabel(showsInspector.wrappedValue ? "Hide details" : "Show details")
+                            .disabled(model.selection.isEmpty)
+                        }
                     }
+                    .fixedSize()
                 }
                 UninstallerStatTiles(model: model)
                 FullDiskAccessBanner(reason: "Apps' containers are protected by macOS. With Full Disk Access, Mac Cleaner can measure and remove them completely.")
@@ -113,12 +134,7 @@ private struct UninstallerMainContent: View {
                         action: { model.reload() }
                     )
                 } else {
-                    HStack(spacing: 0) {
-                        UninstallerAppTable(model: model)
-                        Divider()
-                        UninstallerDetailPanel(model: model)
-                            .frame(width: 340)
-                    }
+                    UninstallerAppTable(model: model)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -126,6 +142,13 @@ private struct UninstallerMainContent: View {
             UninstallerBottomBar(model: model)
         }
         .background(Color.windowBackground)
+        .inspector(isPresented: showsInspector) {
+            UninstallerDetailPanel(model: model) { showsInspector.wrappedValue = false }
+                .inspectorColumnWidth(min: 300, ideal: 330, max: 420)
+        }
+        .onChange(of: model.selection) { _, selection in
+            if selection != dismissedSelection { dismissedSelection = nil }
+        }
         .quickLookPreview($model.quickLookURL)
         .sheet(item: $model.preview, onDismiss: { model.previewDismissed() }) { preview in
             UninstallerPreviewSheet(model: model, preview: preview)
@@ -137,27 +160,30 @@ private struct UninstallerStatTiles: View {
     var model: UninstallerViewModel
 
     var body: some View {
-        HStack(spacing: 12) {
+        TileRow {
             StatTile(
                 title: "Installed Apps",
                 value: model.hasLoaded ? NumberFormatting.count(model.listedApps.count) : "—",
                 caption: sizeCaption,
                 symbol: "app.badge",
-                tint: AppSection.uninstaller.tint
+                tint: AppSection.uninstaller.tint,
+                fillsHeight: true
             )
             StatTile(
                 title: "Unused for 90 Days",
                 value: model.hasLoaded ? NumberFormatting.count(model.unusedApps.count) : "—",
                 caption: unusedCaption,
                 symbol: "moon.zzz.fill",
-                tint: .orange
+                tint: .orange,
+                fillsHeight: true
             )
             StatTile(
                 title: "Leftovers of Removed Apps",
                 value: leftoverValue,
                 caption: leftoverCaption,
                 symbol: "shippingbox.fill",
-                tint: .purple
+                tint: .purple,
+                fillsHeight: true
             )
         }
     }
@@ -299,10 +325,13 @@ private struct UninstallerBottomBar: View {
 
 struct UninstallerAppTable: View {
     @Bindable var model: UninstallerViewModel
+    @State private var columns = TableColumnCustomization<UninstallerApp>()
+    /// Columns hidden because the table got narrow (shown again when it widens).
+    @State private var narrowHidden: Set<String> = []
 
     var body: some View {
         let rows = model.visibleApps
-        Table(rows, selection: $model.selection, sortOrder: $model.sortOrder) {
+        Table(rows, selection: $model.selection, sortOrder: $model.sortOrder, columnCustomization: $columns) {
             TableColumn("Name", value: \UninstallerApp.sortName) { app in
                 HStack(spacing: 8) {
                     FileIcon(path: app.path, size: 22)
@@ -313,14 +342,18 @@ struct UninstallerAppTable: View {
                 }
                 .help(app.path)
             }
-            .width(min: 200, ideal: 280)
+            .width(min: 180, ideal: 280)
+            .customizationID("name")
+            .disabledCustomizationBehavior(.visibility)
 
             TableColumn("Version", value: \UninstallerApp.sortVersion) { app in
-                Text(app.info.displayVersion)
+                Text(Self.shortVersion(app))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .help(Self.versionHelp(app))
             }
-            .width(min: 60, ideal: 90)
+            .width(min: 64, ideal: 84)
+            .customizationID("version")
 
             TableColumn("Size", value: \UninstallerApp.sortSize) { app in
                 if let usage = app.usage {
@@ -332,7 +365,8 @@ struct UninstallerAppTable: View {
                         .accessibilityLabel("Measuring")
                 }
             }
-            .width(min: 70, ideal: 90)
+            .width(min: 66, ideal: 84)
+            .customizationID("size")
 
             TableColumn("Last Used", value: \UninstallerApp.sortLastUsed) { app in
                 if let date = app.lastUsed {
@@ -345,15 +379,25 @@ struct UninstallerAppTable: View {
                         .help("Spotlight has no record of this app being opened.")
                 }
             }
-            .width(min: 90, ideal: 120)
+            .width(min: 86, ideal: 110)
+            .customizationID("lastUsed")
 
             TableColumn("Developer", value: \UninstallerApp.sortDeveloper) { app in
                 Text(app.developer ?? (app.isEnriched ? "Unknown" : "…"))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .help(app.signature?.trustSummary ?? "")
+                    .truncationMode(.tail)
+                    .help([app.developer, app.signature?.trustSummary].compactMap { $0 }.joined(separator: " · "))
             }
-            .width(min: 100, ideal: 170)
+            .width(min: 110, ideal: 190)
+            .customizationID("developer")
+        }
+        .background {
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { adaptColumns(to: proxy.size.width) }
+                    .onChange(of: proxy.size.width) { _, width in adaptColumns(to: width) }
+            }
         }
         .contextMenu(forSelectionType: UninstallerApp.ID.self) { ids in
             contextMenu(for: ids)
@@ -368,6 +412,35 @@ struct UninstallerAppTable: View {
                 } else {
                     ContentUnavailableView.search(text: model.searchText)
                 }
+            }
+        }
+    }
+
+    /// The version people see ("4.3.6"); the build is in the tooltip.
+    static func shortVersion(_ app: UninstallerApp) -> String {
+        app.info.shortVersion.flatMap { $0.isEmpty ? nil : $0 } ?? app.info.buildVersion ?? "—"
+    }
+
+    static func versionHelp(_ app: UninstallerApp) -> String {
+        var text = "Version \(shortVersion(app))"
+        if let build = app.info.buildVersion, !build.isEmpty, build != app.info.shortVersion { text += ", build \(build)" }
+        return text
+    }
+
+    /// Hides the least important columns when the table is too narrow for all of them,
+    /// so it never scrolls sideways; they come back when there's room.
+    private func adaptColumns(to width: CGFloat) {
+        guard width > 0 else { return }
+        let hide: Set<String> = width < 520 ? ["developer", "lastUsed"] : (width < 660 ? ["developer"] : [])
+        for id in ["developer", "lastUsed"] {
+            if hide.contains(id) {
+                if columns[visibility: id] != .hidden {
+                    columns[visibility: id] = .hidden
+                    narrowHidden.insert(id)
+                }
+            } else if narrowHidden.contains(id) {
+                columns[visibility: id] = .automatic
+                narrowHidden.remove(id)
             }
         }
     }

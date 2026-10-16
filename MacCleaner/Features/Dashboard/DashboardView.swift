@@ -16,17 +16,18 @@ struct DashboardView: View {
                 .tint(AppSection.smartScan.tint)
                 .controlSize(.large)
             }
+            AppUpdateBanner(controller: .shared)
             FullDiskAccessBanner(reason: "Grant Full Disk Access so scans can include app containers, Safari data, Mail and the Trash.")
 
             hero
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 16)], spacing: 16) {
+            BalancedGrid(minimumItemWidth: 216, spacing: 16) {
                 storageCard
                 cpuCard
                 memoryCard
             }
 
-            HStack(alignment: .top, spacing: 16) {
+            BalancedGrid(minimumItemWidth: 300, spacing: 16) {
                 securityCard
                 activityCard
             }
@@ -96,16 +97,16 @@ struct DashboardView: View {
     // MARK: - Metric cards
 
     private var storageCard: some View {
-        Card("Storage", symbol: "internaldrive", accessory: {
+        Card("Storage", symbol: "internaldrive", fillsHeight: true, accessory: {
             Button("Analyze") { model.navigate?(.storage) }.buttonStyle(.link)
         }) {
             if let volume = model.volume {
-                HStack(spacing: 16) {
+                DashboardMetricLayout {
                     RingGauge(fraction: volume.usedFraction, tint: volume.usedFraction > 0.9 ? .orange : AppSection.storage.tint) {
                         Text(NumberFormatting.percent(volume.usedFraction))
                             .font(.headline.monospacedDigit())
                     }
-                    .frame(width: 84, height: 84)
+                } details: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(volume.name).font(.headline)
                         KeyValueRow(key: "Used", value: ByteFormatting.string(volume.usedCapacity))
@@ -123,19 +124,23 @@ struct DashboardView: View {
     }
 
     private var cpuCard: some View {
-        Card("Processor", symbol: "cpu", accessory: {
+        Card("Processor", symbol: "cpu", fillsHeight: true, accessory: {
             Button("Monitor") { model.navigate?(.performance) }.buttonStyle(.link)
         }) {
-            HStack(spacing: 16) {
+            DashboardMetricLayout {
                 RingGauge(fraction: model.monitor.latest?.cpuUsage ?? 0, tint: AppSection.performance.tint) {
                     Text(model.monitor.latest.map { NumberFormatting.percent($0.cpuUsage) } ?? "—")
                         .font(.headline.monospacedDigit())
                 }
-                .frame(width: 84, height: 84)
+            } details: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("CPU load").font(.headline)
                     if let sample = model.monitor.latest {
-                        KeyValueRow(key: "Cores", value: "\(sample.perCoreUsage.count)")
+                        KeyValueRow(key: "Cores", value: coresText(sample))
+                        if let load = sample.loadAverage {
+                            KeyValueRow(key: "Load (1 min)", value: load.oneMinute.formatted(.number.precision(.fractionLength(2))))
+                                .help("Average number of threads running or waiting over the last minute.")
+                        }
                         KeyValueRow(key: "Thermal state", value: thermalTitle(sample.thermalState))
                     } else {
                         Text("Measuring…").foregroundStyle(.secondary)
@@ -146,21 +151,30 @@ struct DashboardView: View {
     }
 
     private var memoryCard: some View {
-        Card("Memory", symbol: "memorychip", accessory: {
+        Card("Memory", symbol: "memorychip", fillsHeight: true, accessory: {
             Button("Details") { model.navigate?(.performance) }.buttonStyle(.link)
         }) {
-            HStack(spacing: 16) {
-                let fraction = model.monitor.latest.map { Double($0.memoryUsed) / Double(max($0.memoryTotal, 1)) } ?? 0
+            let fraction = model.monitor.latest.map { Double($0.memoryUsed) / Double(max($0.memoryTotal, 1)) } ?? 0
+            DashboardMetricLayout {
                 RingGauge(fraction: fraction, tint: model.monitor.latest?.memoryPressure.tint ?? .green) {
-                    Text(model.monitor.latest == nil ? "—" : NumberFormatting.percent(fraction))
-                        .font(.headline.monospacedDigit())
+                    VStack(spacing: 0) {
+                        Text(model.monitor.latest == nil ? "—" : NumberFormatting.percent(fraction))
+                            .font(.headline.monospacedDigit())
+                        if let sample = model.monitor.latest {
+                            Text("of \(ByteFormatting.memory(sample.memoryTotal))")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .minimumScaleFactor(0.8)
+                        }
+                    }
                 }
-                .frame(width: 84, height: 84)
+            } details: {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Memory pressure").font(.headline)
                     if let sample = model.monitor.latest {
                         KeyValueRow(key: "Pressure", value: sample.memoryPressure.title, valueColor: sample.memoryPressure.tint)
-                        KeyValueRow(key: "Used", value: "\(ByteFormatting.memory(sample.memoryUsed)) of \(ByteFormatting.memory(sample.memoryTotal))")
+                        KeyValueRow(key: "Used", value: ByteFormatting.memory(sample.memoryUsed))
+                            .help("\(ByteFormatting.memory(sample.memoryUsed)) of \(ByteFormatting.memory(sample.memoryTotal)) in use")
                         KeyValueRow(key: "Swap", value: sample.swapUsed == 0 ? "None" : ByteFormatting.memory(sample.swapUsed))
                     } else {
                         Text("Measuring…").foregroundStyle(.secondary)
@@ -168,6 +182,15 @@ struct DashboardView: View {
                 }
             }
         }
+    }
+
+    /// "10 P + 4 E" on Macs with performance and efficiency cores, otherwise the count.
+    private func coresText(_ sample: PerformanceSample) -> String {
+        let topology = model.monitor.topology
+        if let performance = topology.performanceCoreCount, let efficiency = topology.efficiencyCoreCount, performance + efficiency > 0 {
+            return "\(performance) P + \(efficiency) E"
+        }
+        return "\(sample.perCoreUsage.count)"
     }
 
     private func thermalTitle(_ state: ProcessInfo.ThermalState) -> String {
@@ -183,7 +206,7 @@ struct DashboardView: View {
     // MARK: - Security & activity
 
     private var securityCard: some View {
-        Card("Protection", symbol: "lock.shield", accessory: {
+        Card("Protection", symbol: "lock.shield", fillsHeight: true, accessory: {
             Button("Open Security") { model.navigate?(.security) }.buttonStyle(.link)
         }) {
             if let posture = model.posture {
@@ -219,13 +242,26 @@ struct DashboardView: View {
     }
 
     private var activityCard: some View {
-        Card("Recent Cleanups", symbol: "clock.arrow.circlepath", accessory: {
+        Card("Recent Cleanups", symbol: "clock.arrow.circlepath", fillsHeight: true, accessory: {
             Button("History") { model.navigate?(.history) }.buttonStyle(.link)
         }) {
             if model.recentEntries.isEmpty {
-                Text("Nothing cleaned yet. Results of every cleanup appear here.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                VStack(spacing: 8) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 26, weight: .light))
+                        .foregroundStyle(.tertiary)
+                    Text("Nothing cleaned yet")
+                        .font(.callout.weight(.medium))
+                    Text("Every cleanup is recorded here, and anything moved to the Trash can be put back.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Run Smart Scan") { model.startSmartScan?() }
+                        .controlSize(.small)
+                        .padding(.top, 2)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 8) {
                     ForEach(model.recentEntries) { entry in
@@ -252,7 +288,7 @@ struct DashboardView: View {
     private var quickActions: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Tools").font(.headline)
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
+            BalancedGrid(minimumItemWidth: 170, spacing: 12) {
                 ForEach([AppSection.systemJunk, .uninstaller, .storage, .duplicates, .privacy, .developer, .startup, .updates], id: \.self) { section in
                     Button {
                         model.navigate?(section)
@@ -270,6 +306,25 @@ struct DashboardView: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+        }
+    }
+}
+
+/// A metric card's ring and details: side by side when there's room, stacked in narrow cards.
+private struct DashboardMetricLayout<Ring: View, Details: View>: View {
+    @ViewBuilder var ring: () -> Ring
+    @ViewBuilder var details: () -> Details
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                ring().frame(width: 84, height: 84)
+                details().frame(minWidth: 150, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                ring().frame(width: 76, height: 76)
+                details()
             }
         }
     }

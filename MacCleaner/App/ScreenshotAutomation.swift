@@ -22,8 +22,12 @@ enum ScreenshotAutomation {
     enum Target {
         /// The main window, with any sheet or popover attached to it.
         case main
-        /// Another window, found by its title (About, the update window, Settings).
+        /// Another window, found by its title (About, the update window).
         case window(title: String)
+        /// The Settings window.
+        case settings
+        /// The menu bar popover, rendered in a panel of its own, and the menu bar item.
+        case menuBarHub
     }
 
     struct Step {
@@ -135,6 +139,19 @@ enum ScreenshotAutomation {
                         } else {
                             print("Screenshot automation: window “\(title)” isn't open for \(step.name)")
                         }
+                    case .settings:
+                        if let settings = settingsWindow() {
+                            settings.makeKeyAndOrderFront(nil)
+                            try? await Task.sleep(for: .milliseconds(400))
+                            capture(settings, to: url)
+                        } else {
+                            print("Screenshot automation: the Settings window isn't open for \(step.name)")
+                        }
+                    case .menuBarHub:
+                        await captureMenuBarHub(environment: environment, to: url, appearance: appearance)
+                        if let item = statusItemWindow() {
+                            capture(item, to: directory.appendingPathComponent("\(step.name)-item\(suffix).png"))
+                        }
                     }
                     count += 1
                     await step.reset(environment)
@@ -155,6 +172,51 @@ enum ScreenshotAutomation {
         NSApp.windows.first { $0.title == title && $0.isVisible }?.close()
     }
 
+    static func settingsWindow() -> NSWindow? {
+        NSApp.windows.first { $0.isVisible && ($0.identifier?.rawValue.localizedCaseInsensitiveContains("settings") ?? false) }
+    }
+
+    static func closeSettings() {
+        settingsWindow()?.close()
+    }
+
+    /// The menu bar item's window (an `NSStatusBarWindow`).
+    static func statusItemWindow() -> NSWindow? {
+        NSApp.windows.first { String(describing: type(of: $0)).contains("StatusBarWindow") && $0.isVisible && $0.frame.width < 200 }
+    }
+
+    /// Renders the menu bar popover in a temporary panel with the popover material, as
+    /// it appears under the menu bar item, and captures it.
+    static func captureMenuBarHub(environment: AppEnvironment, to url: URL, appearance: NSAppearance.Name) async {
+        let hosting = NSHostingView(rootView: MenuBarHub(environment: environment))
+        let size = hosting.fittingSize
+        let panel = NSPanel(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.appearance = NSAppearance(named: appearance)
+        let material = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
+        material.material = .popover
+        material.state = .active
+        material.blendingMode = .behindWindow
+        material.wantsLayer = true
+        material.layer?.cornerRadius = 12
+        material.layer?.masksToBounds = true
+        hosting.frame = material.bounds
+        hosting.autoresizingMask = [.width, .height]
+        material.addSubview(hosting)
+        panel.contentView = material
+        if let screen = NSScreen.main {
+            panel.setFrameTopLeftPoint(NSPoint(x: screen.visibleFrame.maxX - size.width - 40, y: screen.visibleFrame.maxY - 8))
+        }
+        panel.orderFrontRegardless()
+        try? await Task.sleep(for: .seconds(3))
+        panel.setContentSize(hosting.fittingSize)
+        try? await Task.sleep(for: .milliseconds(500))
+        capture(panel, to: url)
+        panel.orderOut(nil)
+    }
+
     /// Captures the window as the window server draws it (translucent sidebar,
     /// toolbar and shadow included), together with its sheets and popovers.
     /// An app may always capture its own windows. Falls back to rendering the view
@@ -163,6 +225,12 @@ enum ScreenshotAutomation {
         var windows = [window]
         if let sheet = window.attachedSheet { windows.append(sheet) }
         windows += (window.childWindows ?? []).filter(\.isVisible)
+        // Sheets and popovers SwiftUI presents as separate windows over this one.
+        windows += NSApp.windows.filter { other in
+            other !== window && !windows.contains(other) && other.isVisible && other.windowNumber > 0
+                && other.frame.intersects(window.frame) && other.level.rawValue >= window.level.rawValue
+                && (other.isSheet || other is NSPanel || other.parent === window)
+        }
         if let image = windowServerImage(of: windows) {
             let rep = NSBitmapImageRep(cgImage: image)
             if let data = rep.representation(using: .png, properties: [:]) {
@@ -200,11 +268,11 @@ enum ScreenshotAutomation {
                 return createImage(.null, array, bestResolution)?.takeRetainedValue()
             }
         }
-        guard let window = windows.first, let symbol = dlsym(handle, "CGWindowListCreateImage") else { return nil }
+        guard let window = windows.first, window.windowNumber > 0, let symbol = dlsym(handle, "CGWindowListCreateImage") else { return nil }
         typealias CreateImage = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
         let createImage = unsafeBitCast(symbol, to: CreateImage.self)
         let includingWindow: UInt32 = 1 << 3 // kCGWindowListOptionIncludingWindow
-        return createImage(.null, includingWindow, UInt32(window.windowNumber), bestResolution)?.takeRetainedValue()
+        return createImage(.null, includingWindow, UInt32(truncatingIfNeeded: window.windowNumber), bestResolution)?.takeRetainedValue()
     }
 
     /// Waits until `condition` is true or the timeout passes.

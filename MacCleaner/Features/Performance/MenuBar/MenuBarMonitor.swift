@@ -62,21 +62,7 @@ struct MenuBarMonitorView: View {
                 }
             }
 
-            if let sample = monitor.latest {
-                cpuSection(sample)
-                Divider()
-                memorySection(sample)
-                Divider()
-                ratesSection(sample)
-                Divider()
-                processesSection
-            } else {
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text("Measuring…").foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity, minHeight: 80)
-            }
+            MenuBarMonitorSections(monitor: monitor)
 
             Divider()
             HStack {
@@ -99,6 +85,49 @@ struct MenuBarMonitorView: View {
             guard holdsMonitor else { return }
             holdsMonitor = false
             monitor.release(includingProcesses: true)
+        }
+    }
+
+    // MARK: Actions
+
+    /// Brings the main window forward. A window that is already open (or minimized)
+    /// is reused, so a `WindowGroup` never gets a duplicate; otherwise SwiftUI opens it.
+    private func openMainWindow() {
+        NSApplication.shared.activate()
+        let existing = NSApplication.shared.windows.first { window in
+            window.identifier?.rawValue.hasPrefix("main") == true && (window.isVisible || window.isMiniaturized)
+        }
+        if let existing {
+            if existing.isMiniaturized { existing.deminiaturize(nil) }
+            existing.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow(id: "main")
+        }
+    }
+}
+
+/// CPU with a sparkline, memory and pressure, network and disk rates, and the busiest
+/// processes: the system part of the menu bar popovers.
+struct MenuBarMonitorSections: View {
+    var monitor: PerformanceMonitor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let sample = monitor.latest {
+                cpuSection(sample)
+                Divider()
+                memorySection(sample)
+                Divider()
+                ratesSection(sample)
+                Divider()
+                processesSection
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Measuring…").foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, minHeight: 80)
+            }
         }
     }
 
@@ -198,20 +227,4 @@ struct MenuBarMonitorView: View {
         }
     }
 
-    // MARK: Actions
-
-    /// Brings the main window forward. A window that is already open (or minimized)
-    /// is reused, so a `WindowGroup` never gets a duplicate; otherwise SwiftUI opens it.
-    private func openMainWindow() {
-        NSApplication.shared.activate()
-        let existing = NSApplication.shared.windows.first { window in
-            window.identifier?.rawValue.hasPrefix("main") == true && (window.isVisible || window.isMiniaturized)
-        }
-        if let existing {
-            if existing.isMiniaturized { existing.deminiaturize(nil) }
-            existing.makeKeyAndOrderFront(nil)
-        } else {
-            openWindow(id: "main")
-        }
-    }
 }

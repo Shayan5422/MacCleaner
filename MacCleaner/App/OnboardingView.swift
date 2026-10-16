@@ -40,10 +40,15 @@ struct OnboardingView: View {
     }
 
     private var welcome: some View {
-        VStack(spacing: 20) {
-            IconTile(section: .smartScan, size: 88)
-            Text("Welcome to Mac Cleaner")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+        VStack(spacing: 16) {
+            AppIconImage(size: 84)
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 3)
+            VStack(spacing: 6) {
+                Text("Welcome to Mac Cleaner")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                Text(AppInfo.tagline)
+                    .font(.title3.weight(.medium))
+            }
             Text("Free up space, remove apps completely and keep an eye on your Mac — without subscriptions, accounts or tracking.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)

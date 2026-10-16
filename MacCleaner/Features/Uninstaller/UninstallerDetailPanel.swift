@@ -3,11 +3,12 @@ import SwiftUI
 /// Right-hand panel: details of the selected app, or a summary of several.
 struct UninstallerDetailPanel: View {
     @Bindable var model: UninstallerViewModel
+    var onClose: (() -> Void)?
 
     var body: some View {
         Group {
             if let app = model.singleSelection {
-                UninstallerAppDetail(model: model, app: app)
+                UninstallerAppDetail(model: model, app: app, onClose: onClose)
             } else if model.selection.count > 1 {
                 UninstallerMultiSelectionSummary(model: model)
             } else {
@@ -26,6 +27,7 @@ struct UninstallerDetailPanel: View {
 private struct UninstallerAppDetail: View {
     @Bindable var model: UninstallerViewModel
     var app: UninstallerApp
+    var onClose: (() -> Void)?
 
     var body: some View {
         ScrollView {
@@ -43,24 +45,40 @@ private struct UninstallerAppDetail: View {
     }
 
     private var header: some View {
-        HStack(spacing: 12) {
-            FileIcon(path: app.path, size: 56)
+        HStack(alignment: .top, spacing: 12) {
+            FileIcon(path: app.path, size: 52)
             VStack(alignment: .leading, spacing: 3) {
                 Text(app.name)
                     .font(.title3.weight(.semibold))
                     .lineLimit(2)
-                Text("Version \(app.info.displayVersion)")
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("Version \(UninstallerAppTable.shortVersion(app))")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .help(UninstallerAppTable.versionHelp(app))
                 UninstallerAppBadges(app: app, isRunning: model.isRunning(app))
             }
             Spacer(minLength: 0)
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.borderless)
+                .help("Hide details")
+                .accessibilityLabel("Hide details")
+            }
         }
     }
 
     private var facts: some View {
         VStack(alignment: .leading, spacing: 8) {
             KeyValueRow(key: "Developer", value: app.developer ?? (app.isEnriched ? "Unknown" : "Checking…"))
+            if let build = app.info.buildVersion, !build.isEmpty, build != app.info.shortVersion {
+                KeyValueRow(key: "Build", value: build)
+            }
             KeyValueRow(key: "Signature", value: app.signature?.trustSummary ?? "Checking…", valueColor: signatureColor)
             KeyValueRow(key: "App size", value: app.usage.map { ByteFormatting.string($0.allocatedBytes) } ?? "Measuring…")
             KeyValueRow(key: "Last used", value: lastUsedText)

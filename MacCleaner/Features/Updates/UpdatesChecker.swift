@@ -99,6 +99,7 @@ struct UpdatesChecker: Sendable {
                 .compactMap { $0 }.first { ["https", "http"].contains($0.scheme?.lowercased() ?? "") }
             result.releaseDate = best.publicationDate
             result.isCritical = best.isCritical
+            result.releaseNotesHTML = best.descriptionHTML
             switch evaluation.status {
             case .updateAvailable:
                 result.latestVersion = best.displayVersion

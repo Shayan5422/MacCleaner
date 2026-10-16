@@ -66,12 +66,14 @@ struct PrivacyBrowserCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(report.browser.name)
                         .font(.headline)
-                        .lineLimit(1)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
+                .layoutPriority(1)
                 Spacer(minLength: 4)
                 if isRunning {
                     Badge(text: isQuitting ? "Quitting" : "Open", symbol: "circle.fill", tint: .orange)

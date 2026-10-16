@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 import Observation
 
-/// Drives the Updates page: installed apps with their versions and sizes, and update
-/// checks from the App Store, developers' Sparkle feeds and Homebrew.
+/// Drives the Updates page: installed apps with their versions, update checks from the
+/// App Store, developers' Sparkle feeds and Homebrew, and Mac Cleaner's own releases.
 @MainActor
 @Observable
 final class UpdatesViewModel {
@@ -19,7 +19,7 @@ final class UpdatesViewModel {
             case .appStore: return "App Store"
             case .sparkle: return "Developer Feeds"
             case .homebrew: return "Homebrew"
-            case .unknown: return "No Information"
+            case .unknown: return "Other Apps"
             }
         }
 
@@ -33,12 +33,113 @@ final class UpdatesViewModel {
             case .unknown: return "questionmark.circle"
             }
         }
+
+        var help: String {
+            switch self {
+            case .all: return "Every app Mac Cleaner found, and Mac Cleaner itself"
+            case .updates: return "Apps with a newer version"
+            case .appStore: return "Apps installed from the App Store"
+            case .sparkle: return "Apps that publish a developer update feed"
+            case .homebrew: return "Apps installed with Homebrew"
+            case .unknown: return "Apps that update themselves or have no update information"
+            }
+        }
+    }
+
+    /// The sections of the list.
+    enum Group: String, CaseIterable, Identifiable, Sendable {
+        case updates, notChecked, upToDate, other
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .updates: return "Updates Available"
+            case .notChecked: return "Not Checked Yet"
+            case .upToDate: return "Up to Date"
+            case .other: return "Other Apps"
+            }
+        }
+
+        var subtitle: String {
+            switch self {
+            case .updates: return "Newer versions from the App Store, developers' update feeds, Homebrew and GitHub."
+            case .notChecked: return "Apps whose source of updates can be checked. Click Check for Updates."
+            case .upToDate: return "You have the latest version these sources offer."
+            case .other: return "These apps update themselves, or don't publish update information Mac Cleaner can read."
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .updates: return "arrow.down.circle.fill"
+            case .notChecked: return "circle.dashed"
+            case .upToDate: return "checkmark.circle.fill"
+            case .other: return "questionmark.circle.fill"
+            }
+        }
+    }
+
+    enum SortKey: String, CaseIterable, Identifiable {
+        case name, size, lastUsed
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .name: return "Name"
+            case .size: return "Size (Largest First)"
+            case .lastUsed: return "Last Used (Recent First)"
+            }
+        }
+    }
+
+    struct Section: Identifiable, Equatable {
+        var group: Group
+        var rows: [UpdatesAppRow]
+        var id: Group { group }
+    }
+
+    /// What a row's main button does when an update is available.
+    enum UpdateAction: Equatable {
+        /// Opens the app's page in the App Store, which installs the update.
+        case appStore(URL)
+        /// Runs `brew upgrade --cask` after confirmation.
+        case homebrew
+        /// Opens the app, whose own updater installs the update.
+        case openApp
+        /// Mac Cleaner's verified download and install.
+        case macCleaner
+        case none
+    }
+
+    /// Inline release notes of a row.
+    enum NotesState: Equatable {
+        case loading
+        case loaded(ReleaseNotesDocument)
+        case failed(String)
+    }
+
+    /// What "Update All" does, by kind of update.
+    struct UpdateAllPlan: Equatable {
+        var appStore: [UpdatesAppRow] = []
+        var homebrew: [UpdatesHomebrewRun.Item] = []
+        /// Apps whose own updater installs the update (they can't be updated from Mac Cleaner).
+        var selfUpdating: [UpdatesAppRow] = []
+        var macCleaner: UpdatesAppRow?
+
+        var canRun: Bool { !appStore.isEmpty || !homebrew.isEmpty }
+        var isEmpty: Bool { appStore.isEmpty && homebrew.isEmpty && selfUpdating.isEmpty && macCleaner == nil }
     }
 
     let services: AppServices
+    let appUpdates: AppUpdateController
     /// Set by the app shell to open another section (optional).
     @ObservationIgnored var navigate: ((AppSection) -> Void)?
+    /// Receives an event when a check finds app updates (the menu bar's Activity feed).
+    @ObservationIgnored var eventLog: ProtectionEventLog?
 
+    /// Installed apps, without Mac Cleaner itself (see `allRows`).
     private(set) var rows: [UpdatesAppRow] = []
     private(set) var hasLoaded = false
     private(set) var isLoading = false
@@ -54,22 +155,25 @@ final class UpdatesViewModel {
     private(set) var homebrewError: String?
     /// Explains what the last check covered (for example when online checks are off).
     private(set) var checkNotice: String?
-    private(set) var leftoverSummary: UninstallerOrphanScanResult?
     private(set) var appData: [String: UninstallerLocateResult] = [:]
     private(set) var appDataLoading: Set<String> = []
+    /// The running copy of Mac Cleaner, shown as its own row.
+    private(set) var selfApp: UninstallerApp?
 
     var filter: Filter = .all
     var searchText = ""
-    var sortOrder: [KeyPathComparator<UpdatesAppRow>] = [
-        KeyPathComparator(\UpdatesAppRow.sortStatus),
-        KeyPathComparator(\UpdatesAppRow.sortName),
-    ]
-    var selection: Set<UpdatesAppRow.ID> = [] {
-        didSet { selectionDidChange() }
+    var sortKey: SortKey = .name
+    var expandedGroups: Set<Group> = [.updates, .notChecked]
+    /// The row shown in the inspector.
+    var inspectedRowID: UpdatesAppRow.ID? {
+        didSet { inspectedRowChanged() }
     }
+    private(set) var expandedNotes: Set<UpdatesAppRow.ID> = []
+    private(set) var notes: [UpdatesAppRow.ID: NotesState] = [:]
+    var isShowingUpdateAll = false
     var homebrewRun: UpdatesHomebrewRun?
-    /// Waiting for the person to confirm `brew upgrade` for this app path.
-    var homebrewConfirmationPath: String?
+    /// Waiting for the person to confirm `brew upgrade` for these apps.
+    var pendingHomebrewItems: [UpdatesHomebrewRun.Item]?
 
     @ObservationIgnored private var loadTask: Task<Void, Never>?
     @ObservationIgnored private var enrichTask: Task<Void, Never>?
@@ -81,27 +185,101 @@ final class UpdatesViewModel {
     /// their data is never mistaken for leftovers.
     @ObservationIgnored private var componentApps: [UninstallerApp] = []
 
-    init(services: AppServices) {
+    init(services: AppServices, appUpdates: AppUpdateController? = nil, includesMacCleaner: Bool = true) {
         self.services = services
+        let controller = appUpdates ?? .shared
+        self.appUpdates = controller
+        if appUpdates == nil { eventLog = .shared }
+        if includesMacCleaner { selfApp = Self.runningApp(version: controller.isSimulated ? controller.currentVersion : nil) }
+    }
+
+    /// The running bundle as an app row's app.
+    private static func runningApp(version: String?) -> UninstallerApp? {
+        guard var info = ApplicationCatalog.read(path: Bundle.main.bundlePath) else { return nil }
+        if let version {
+            info.shortVersion = version
+            info.buildVersion = nil
+        }
+        return UninstallerApp(
+            info: info,
+            identity: UninstallerAppIdentity(path: info.path, bundleIdentifier: info.bundleIdentifier, names: [info.name], executableName: info.executableName),
+            lastUsed: Date(),
+            protection: .macCleanerItself
+        )
+    }
+
+    // MARK: - Rows
+
+    /// Mac Cleaner's own row: its state comes from `AppUpdateController`.
+    var macCleanerRow: UpdatesAppRow? {
+        guard let selfApp else { return nil }
+        var row = UpdatesAppRow(app: selfApp, mechanism: .github)
+        row.isChecking = appUpdates.isChecking
+        row.result = macCleanerResult(installed: selfApp.info.displayVersion)
+        if let release = appUpdates.latestRelease { row.isSkipped = appUpdates.isSkipped(release) }
+        return row
+    }
+
+    private func macCleanerResult(installed: String) -> UpdatesCheckResult? {
+        if let release = appUpdates.latestRelease {
+            var result = UpdatesCheckResult(
+                status: .updateAvailable,
+                source: .github,
+                latestVersion: release.version,
+                detail: "Version \(release.version) is available on GitHub. The download is verified (checksum, Developer ID signature and notarization) before it replaces this copy."
+                    + (appUpdates.isSkipped(release) ? " You chose to skip this version." : ""),
+                checkedAt: appUpdates.lastCheckDate ?? Date(),
+                installedVersionAtCheck: installed
+            )
+            result.releaseNotesURL = release.pageURL
+            result.releaseDate = release.publishedAt
+            return result
+        }
+        if let date = appUpdates.lastCheckDate {
+            return UpdatesCheckResult(status: .upToDate, source: .github, latestVersion: appUpdates.currentVersion,
+                                      detail: "You have the newest release on GitHub.", checkedAt: date, installedVersionAtCheck: installed)
+        }
+        if let failure = appUpdates.lastFailure {
+            return UpdatesCheckResult(status: .failed, source: .github, detail: failure, checkedAt: Date(), installedVersionAtCheck: installed)
+        }
+        return nil
+    }
+
+    /// Every row: installed apps and Mac Cleaner itself.
+    var allRows: [UpdatesAppRow] {
+        guard let macCleanerRow else { return rows }
+        return [macCleanerRow] + rows
+    }
+
+    /// Replaces the rows (tests and previews).
+    func replaceRows(_ newRows: [UpdatesAppRow], checkedAt: Date? = nil) {
+        rows = newRows
+        lastCheckDate = checkedAt
+        hasLoaded = true
     }
 
     // MARK: - Derived data
 
-    var availableUpdateCount: Int { rows.filter { $0.status == .updateAvailable }.count }
-    var upToDateCount: Int { rows.filter { $0.status == .upToDate }.count }
-    /// Apps a check found no reliable information for (or couldn't check).
-    var unknownCount: Int { rows.filter { [.unknown, .failed].contains($0.status) }.count }
+    /// Updates waiting to be installed (a skipped Mac Cleaner version doesn't count).
+    var availableUpdateCount: Int {
+        rows.filter { $0.status == .updateAvailable }.count + (appUpdates.availableUpdate == nil ? 0 : 1)
+    }
+
+    var upToDateCount: Int { allRows.filter { $0.status == .upToDate }.count }
+    /// Apps that update themselves or have no reliable information (or couldn't be checked).
+    var otherCount: Int { allRows.filter { Self.group(of: $0) == .other }.count }
     var appStoreUpdateCount: Int { rows.filter { $0.status == .updateAvailable && $0.displaySource == .appStore }.count }
+    var hasChecked: Bool { lastCheckDate != nil }
 
     var visibleRows: [UpdatesAppRow] {
-        var list = rows
+        var list = allRows
         switch filter {
         case .all: break
-        case .updates: list = list.filter { $0.status == .updateAvailable || $0.status == .incompatible }
+        case .updates: list = list.filter { Self.group(of: $0) == .updates }
         case .appStore: list = list.filter { $0.mechanism == .appStore }
         case .sparkle: list = list.filter { $0.displaySource == .sparkle || $0.checkableSource == .sparkle }
         case .homebrew: list = list.filter { homebrewCasks[$0.id] != nil }
-        case .unknown: list = list.filter { [.unknown, .failed].contains($0.status) }
+        case .unknown: list = list.filter { Self.group(of: $0) == .other }
         }
         let query = searchText.trimmingCharacters(in: .whitespaces)
         if !query.isEmpty {
@@ -109,23 +287,87 @@ final class UpdatesViewModel {
                 row.name.localizedCaseInsensitiveContains(query) || (row.app.bundleIdentifier?.localizedCaseInsensitiveContains(query) ?? false)
             }
         }
-        return list.sorted(using: sortOrder)
+        return list
     }
 
     func count(for filter: Filter) -> Int {
         switch filter {
-        case .all: return rows.count
-        case .updates: return rows.filter { $0.status == .updateAvailable || $0.status == .incompatible }.count
+        case .all: return allRows.count
+        case .updates: return allRows.filter { Self.group(of: $0) == .updates }.count
         case .appStore: return rows.filter { $0.mechanism == .appStore }.count
         case .sparkle: return rows.filter { $0.displaySource == .sparkle || $0.checkableSource == .sparkle }.count
         case .homebrew: return homebrewCasks.count
-        case .unknown: return unknownCount
+        case .unknown: return otherCount
         }
     }
 
-    var selectedRow: UpdatesAppRow? {
-        guard let id = selection.first else { return nil }
-        return rows.first { $0.id == id }
+    /// Visible rows grouped into sections, each sorted by `sortKey`.
+    var sections: [Section] {
+        Self.sections(for: visibleRows, sortedBy: sortKey)
+    }
+
+    nonisolated static func sections(for rows: [UpdatesAppRow], sortedBy key: SortKey) -> [Section] {
+        let grouped = Dictionary(grouping: rows, by: group(of:))
+        return Group.allCases.compactMap { group in
+            guard let members = grouped[group], !members.isEmpty else { return nil }
+            return Section(group: group, rows: sorted(members, by: key))
+        }
+    }
+
+    /// The section a row belongs in. A row keeps its section while it's being checked.
+    nonisolated static func group(of row: UpdatesAppRow) -> Group {
+        switch row.result?.status ?? .notChecked {
+        case .updateAvailable, .incompatible: return .updates
+        case .upToDate: return .upToDate
+        case .notChecked, .checking: return .notChecked
+        case .unknown, .failed: return .other
+        }
+    }
+
+    /// Mac Cleaner first, then important updates, installable before incompatible ones,
+    /// then by `key` (name breaks ties).
+    nonisolated static func sorted(_ rows: [UpdatesAppRow], by key: SortKey) -> [UpdatesAppRow] {
+        rows.sorted { lhs, rhs in
+            if lhs.isMacCleaner != rhs.isMacCleaner { return lhs.isMacCleaner }
+            let lhsImportant = lhs.result?.isCritical == true && lhs.result?.status == .updateAvailable
+            let rhsImportant = rhs.result?.isCritical == true && rhs.result?.status == .updateAvailable
+            if lhsImportant != rhsImportant { return lhsImportant }
+            let lhsIncompatible = lhs.result?.status == .incompatible
+            let rhsIncompatible = rhs.result?.status == .incompatible
+            if lhsIncompatible != rhsIncompatible { return rhsIncompatible }
+            switch key {
+            case .name:
+                break
+            case .size:
+                if lhs.sortSize != rhs.sortSize { return lhs.sortSize > rhs.sortSize }
+            case .lastUsed:
+                if lhs.sortLastUsed != rhs.sortLastUsed { return lhs.sortLastUsed > rhs.sortLastUsed }
+            }
+            let order = lhs.sortName.localizedStandardCompare(rhs.sortName)
+            return order == .orderedSame ? lhs.id < rhs.id : order == .orderedAscending
+        }
+    }
+
+    func isExpanded(_ group: Group) -> Bool {
+        !searchText.trimmingCharacters(in: .whitespaces).isEmpty || filter != .all || expandedGroups.contains(group)
+    }
+
+    func toggle(_ group: Group) {
+        if expandedGroups.contains(group) { expandedGroups.remove(group) } else { expandedGroups.insert(group) }
+    }
+
+    var inspectedRow: UpdatesAppRow? {
+        guard let id = inspectedRowID else { return nil }
+        return allRows.first { $0.id == id }
+    }
+
+    var isInspectorPresented: Bool {
+        get { inspectedRowID != nil }
+        set { if !newValue { inspectedRowID = nil } }
+    }
+
+    func inspect(_ row: UpdatesAppRow) {
+        inspectedRowID = inspectedRowID == row.id ? nil : row.id
     }
 
     // MARK: - Loading
@@ -162,18 +404,25 @@ final class UpdatesViewModel {
             brewPath = UpdatesHomebrew.locateBrew()
             hasLoaded = true
             isLoading = false
-            selection = selection.filter { id in rows.contains { $0.id == id } }
+            if let id = inspectedRowID, !allRows.contains(where: { $0.id == id }) { inspectedRowID = nil }
             startSizing()
             startEnrichment()
         }
     }
 
+    /// Measures apps with updates first, so the sizes people look at appear soonest.
     private func startSizing() {
         sizeTask?.cancel()
-        let apps = rows.map(\.app)
+        var apps = rows.sorted { lhs, rhs in
+            let lhsFirst = Self.group(of: lhs) == .updates
+            let rhsFirst = Self.group(of: rhs) == .updates
+            return lhsFirst != rhsFirst ? lhsFirst : lhs.sortName < rhs.sortName
+        }.map(\.app)
+        if let selfApp { apps.insert(selfApp, at: 0) }
         let scanner = services.scanner
         sizeTask = Task {
-            for await (path, usage) in UninstallerInventory.sizeUpdates(for: apps, scanner: scanner) {
+            for await (path, usage) in UninstallerInventory.sizeUpdates(for: apps, scanner: scanner, concurrency: 4) {
+                if path == selfApp?.path { selfApp?.usage = usage }
                 update(path) { $0.app.usage = usage }
             }
         }
@@ -198,8 +447,7 @@ final class UpdatesViewModel {
             }
             guard !Task.isCancelled else { return }
             isEnriching = false
-            scanLeftoverSummary()
-            if let row = selectedRow, appData[row.id] == nil { loadAppData(for: row) }
+            if let row = inspectedRow, appData[row.id] == nil { loadAppData(for: row) }
         }
     }
 
@@ -216,6 +464,9 @@ final class UpdatesViewModel {
         let brew = UpdatesHomebrew.locateBrew()
         brewPath = brew
         homebrewError = nil
+        if online, selfApp != nil {
+            Task { await appUpdates.performCheck(manual: true) }
+        }
         guard online || brew != nil else {
             checkNotice = "Online update checks are turned off, and Homebrew isn't installed, so there's nothing to check."
             return
@@ -341,6 +592,7 @@ final class UpdatesViewModel {
             result.installedVersionAtCheck = row.installedVersion
             rows[index].result = result
             rows[index].isChecking = false
+            notes[path] = nil
         }
     }
 
@@ -379,11 +631,27 @@ final class UpdatesViewModel {
         lastCheckDate = now
         let results = Dictionary(rows.compactMap { row in row.result.map { (row.id, $0) } }, uniquingKeysWith: { first, _ in first })
         UpdatesResultStore.save(UpdatesResultStore.Snapshot(checkedAt: now, results: results))
+        let updates = rows.filter { $0.status == .updateAvailable }
         let duration = String(format: "%.1f", now.timeIntervalSince(started))
         services.logger.info(
-            "Update check: \(availableUpdateCount) update(s) available, \(upToDateCount) up to date, \(unknownCount) without information; \(sparkle.count) feed(s), \(store.count) App Store app(s), Homebrew \(brew == nil ? "not used" : "checked"); \(duration)s",
+            "Update check: \(updates.count) update(s) available, \(upToDateCount) up to date, \(otherCount) without information; \(sparkle.count) feed(s), \(store.count) App Store app(s), Homebrew \(brew == nil ? "not used" : "checked"); \(duration)s",
             category: .updates
         )
+        postUpdatesEvent(updates)
+    }
+
+    /// "3 app updates available" in the Activity feed.
+    private func postUpdatesEvent(_ updates: [UpdatesAppRow]) {
+        guard !updates.isEmpty else { return }
+        let names = Self.sorted(updates, by: .name).map(\.name)
+        let listed = names.prefix(3).joined(separator: ", ") + (names.count > 3 ? " and \(names.count - 3) more" : "")
+        eventLog?.post(ProtectionEvent(
+            kind: .appUpdateAvailable,
+            severity: .recommendation,
+            title: "\(updates.count) app update\(updates.count == 1 ? "" : "s") available",
+            detail: listed,
+            section: .updates
+        ))
     }
 
     /// Lets people turn on online checks from the page (the setting lives in Settings).
@@ -392,7 +660,54 @@ final class UpdatesViewModel {
         checkNotice = nil
     }
 
-    // MARK: - Actions
+    // MARK: - Updating
+
+    func updateAction(for row: UpdatesAppRow) -> UpdateAction {
+        guard row.status == .updateAvailable || (row.isChecking && row.result?.status == .updateAvailable) else { return .none }
+        if row.isMacCleaner { return .macCleaner }
+        if row.displaySource == .appStore, let url = row.result?.storeURL { return .appStore(url) }
+        if row.displaySource == .homebrew, canUpgradeWithHomebrew(row) { return .homebrew }
+        return .openApp
+    }
+
+    func canUpgradeWithHomebrew(_ row: UpdatesAppRow) -> Bool {
+        guard brewPath != nil, let cask = homebrewCasks[row.id], cask.hasSafeToken else { return false }
+        return row.status == .updateAvailable && (row.displaySource == .homebrew || row.result?.homebrewToken != nil)
+    }
+
+    /// Runs the row's update action (Mac Cleaner's own update is opened by the view).
+    func performUpdate(_ row: UpdatesAppRow) {
+        switch updateAction(for: row) {
+        case .appStore(let url): NSWorkspace.shared.open(url)
+        case .homebrew: requestHomebrewUpgrade(row)
+        case .openApp: openApp(row)
+        case .macCleaner, .none: break
+        }
+    }
+
+    var updateAllPlan: UpdateAllPlan {
+        var plan = UpdateAllPlan()
+        for row in Self.sorted(allRows.filter { $0.status == .updateAvailable && !$0.isSkipped }, by: .name) {
+            switch updateAction(for: row) {
+            case .appStore: plan.appStore.append(row)
+            case .homebrew:
+                if let cask = homebrewCasks[row.id] { plan.homebrew.append(UpdatesHomebrewRun.Item(appName: row.name, appPath: row.id, cask: cask)) }
+            case .openApp: plan.selfUpdating.append(row)
+            case .macCleaner: plan.macCleaner = row
+            case .none: break
+            }
+        }
+        return plan
+    }
+
+    /// "Update All": opens the App Store's Updates page and runs one `brew upgrade --cask`
+    /// for the Homebrew apps. Apps with their own updater are listed for the person.
+    func runUpdateAll(openAppStore: Bool, runHomebrew: Bool) {
+        let plan = updateAllPlan
+        isShowingUpdateAll = false
+        if openAppStore, !plan.appStore.isEmpty { openAppStoreUpdates() }
+        if runHomebrew, !plan.homebrew.isEmpty { startHomebrew(plan.homebrew) }
+    }
 
     func openInAppStore(_ row: UpdatesAppRow) {
         guard let url = row.result?.storeURL else { return }
@@ -411,12 +726,13 @@ final class UpdatesViewModel {
             do {
                 _ = try await NSWorkspace.shared.openApplication(at: url, configuration: configuration)
             } catch {
-                checkNotice = "The app couldn't be opened: \(error.localizedDescription)"
+                checkNotice = "\(row.name) couldn't be opened: \(error.localizedDescription)"
             }
         }
     }
 
-    func openReleaseNotes(_ row: UpdatesAppRow) {
+    /// The developer's release notes page or the cask's homepage, in the browser.
+    func openReleaseNotesPage(_ row: UpdatesAppRow) {
         guard let url = row.result?.releaseNotesURL, ["https", "http"].contains(url.scheme?.lowercased() ?? "") else { return }
         NSWorkspace.shared.open(url)
     }
@@ -425,21 +741,28 @@ final class UpdatesViewModel {
         homebrewCasks[row.id]
     }
 
-    /// Shows the confirmation for `brew upgrade --cask`.
+    /// Asks for confirmation before `brew upgrade --cask`.
     func requestHomebrewUpgrade(_ row: UpdatesAppRow) {
-        guard brewPath != nil, homebrewCasks[row.id]?.hasSafeToken == true else { return }
-        homebrewConfirmationPath = row.id
+        guard canUpgradeWithHomebrew(row), let cask = homebrewCasks[row.id] else { return }
+        pendingHomebrewItems = [UpdatesHomebrewRun.Item(appName: row.name, appPath: row.id, cask: cask)]
     }
 
     func confirmHomebrewUpgrade() {
-        guard let path = homebrewConfirmationPath, let brew = brewPath, let cask = homebrewCasks[path],
-              let row = rows.first(where: { $0.id == path }) else { return }
-        homebrewConfirmationPath = nil
-        let run = UpdatesHomebrewRun(appName: row.name, appPath: path, cask: cask, brewPath: brew)
+        guard let items = pendingHomebrewItems else { return }
+        pendingHomebrewItems = nil
+        startHomebrew(items)
+    }
+
+    private func startHomebrew(_ items: [UpdatesHomebrewRun.Item]) {
+        guard let brew = brewPath, homebrewRun?.isRunning != true else { return }
+        let run = UpdatesHomebrewRun(items: items, brewPath: brew)
         homebrewRun = run
         run.start(logger: services.logger) { [weak self] succeeded in
             guard succeeded else { return }
-            self?.refreshAfterUpgrade(path: path, latest: row.result?.latestVersion)
+            for item in items {
+                let latest = self?.rows.first { $0.id == item.appPath }?.result?.latestVersion
+                self?.refreshAfterUpgrade(path: item.appPath, latest: latest)
+            }
         }
     }
 
@@ -466,14 +789,69 @@ final class UpdatesViewModel {
         }
     }
 
-    // MARK: - App data and leftovers
+    // MARK: - Release notes
 
-    private func selectionDidChange() {
-        guard let row = selectedRow, appData[row.id] == nil, !isEnriching else { return }
+    /// Whether the row can show release notes inline (or at least link to them).
+    func hasReleaseNotes(_ row: UpdatesAppRow) -> Bool {
+        if row.isMacCleaner { return appUpdates.latestRelease?.notes?.isEmpty == false }
+        if row.hasEmbeddedReleaseNotes { return true }
+        return row.displaySource == .sparkle && row.result?.releaseNotesURL?.scheme?.lowercased() == "https"
+    }
+
+    func isShowingNotes(_ row: UpdatesAppRow) -> Bool {
+        expandedNotes.contains(row.id)
+    }
+
+    func toggleReleaseNotes(_ row: UpdatesAppRow) {
+        if expandedNotes.remove(row.id) != nil { return }
+        expandedNotes.insert(row.id)
+        loadReleaseNotes(row)
+    }
+
+    /// Notes the check returned are shown right away; a feed's release-notes page is
+    /// read on request (HTTPS only, as text: no scripts or images are loaded).
+    func loadReleaseNotes(_ row: UpdatesAppRow) {
+        if case .loaded? = notes[row.id] { return }
+        if case .loading? = notes[row.id] { return }
+        if row.isMacCleaner, let text = appUpdates.latestRelease?.notes {
+            notes[row.id] = Self.notesState(.markdown(text))
+        } else if let html = row.result?.releaseNotesHTML, !html.isEmpty {
+            notes[row.id] = Self.notesState(.detect(html))
+        } else if let text = row.result?.releaseNotesText, !text.isEmpty {
+            notes[row.id] = Self.notesState(.plainText(text))
+        } else if let url = row.result?.releaseNotesURL, url.scheme?.lowercased() == "https" {
+            guard services.settings.checkUpdatesOnline else {
+                notes[row.id] = .failed("Online update checks are off, so the release notes page wasn't loaded.")
+                return
+            }
+            notes[row.id] = .loading
+            let id = row.id
+            Task {
+                do {
+                    let data = try await UpdatesHTTPClient.shared.fetch(url, accept: "text/html, text/markdown, text/plain;q=0.9, */*;q=0.5", maxBytes: 2 * 1024 * 1024)
+                    let text = String(decoding: data, as: UTF8.self)
+                    notes[id] = Self.notesState(.detect(text))
+                } catch {
+                    notes[id] = .failed(UpdatesCheckError.wrap(error).localizedDescription)
+                }
+            }
+        } else {
+            notes[row.id] = .failed("The developer doesn't publish release notes for this version.")
+        }
+    }
+
+    private static func notesState(_ document: ReleaseNotesDocument) -> NotesState {
+        document.isEmpty ? .failed("The release notes are empty.") : .loaded(document)
+    }
+
+    // MARK: - App data
+
+    private func inspectedRowChanged() {
+        guard let row = inspectedRow, appData[row.id] == nil, !isEnriching, !row.isMacCleaner else { return }
         loadAppData(for: row)
     }
 
-    /// Finds the selected app's files in Library folders (without permission prompts).
+    /// Finds the inspected app's files in Library folders (without permission prompts).
     func loadAppData(for row: UpdatesAppRow) {
         appDataTask?.cancel()
         appDataLoading.insert(row.id)
@@ -489,20 +867,6 @@ final class UpdatesViewModel {
             appDataLoading.remove(row.id)
             guard !Task.isCancelled else { return }
             appData[row.id] = results.first
-        }
-    }
-
-    /// Size of data left by removed apps, shown as a hint toward the Uninstaller.
-    private func scanLeftoverSummary() {
-        let apps = rows.map(\.app) + componentApps
-        let canRead = services.permissions.fullDiskAccess == .granted
-        let exclusions = services.settings.exclusions
-        let policy = services.policy
-        let scanner = services.scanner
-        Task {
-            leftoverSummary = try? await UninstallerOrphanService.scan(
-                apps: apps, canReadProtectedAppData: canRead, exclusions: exclusions, policy: policy, scanner: scanner
-            )
         }
     }
 }

@@ -106,7 +106,7 @@ final class DashboardViewModel {
         let known = checks.compactMap { $0 }
         let off = known.filter { !$0 }.count
         let level: HealthItem.Level = known.isEmpty ? .unknown : (off == 0 ? .good : (posture.gatekeeperEnabled == false || posture.sipEnabled == false ? .problem : .attention))
-        let detail = known.isEmpty ? "Couldn't read protection status" : (off == 0 ? "All \(known.count) protections are on" : "\(off) of \(known.count) protections are off")
+        let detail = known.isEmpty ? "Couldn't read protection status" : (off == 0 ? "All \(known.count) protections are on" : "\(off) of \(known.count) protections \(off == 1 ? "is" : "are") off")
         return HealthItem(id: "security", title: "Security", symbol: "lock.shield", level: level, detail: detail, destination: .security)
     }
 

@@ -30,19 +30,55 @@ private struct GeneralSettingsTab: View {
     @Bindable var settings: SettingsManager
     let notifications: NotificationService
     let permissions: PermissionManager
+    @Bindable var menuBar = MenuBarPreferences.shared
+    @Bindable var appUpdates = AppUpdateController.shared
+    var loginItem = LoginItemController.shared
     @State private var notificationsAllowed = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Form {
+            Section("Menu Bar") {
+                Toggle("Show Mac Cleaner in the menu bar", isOn: $settings.showMenuBarExtra)
+                Picker("Menu bar shows", selection: $menuBar.labelStyle) {
+                    ForEach(MenuBarLabelStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .disabled(!settings.showMenuBarExtra)
+                Toggle("Hide the Dock icon when the window is closed", isOn: $menuBar.hidesDockIconWhenWindowClosed)
+                    .disabled(!settings.showMenuBarExtra)
+                Text(settings.showMenuBarExtra
+                     ? "Closing the window keeps Mac Cleaner running in the menu bar. Choose Quit Mac Cleaner (⌘Q) to quit it."
+                     : "Closing the window quits Mac Cleaner.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Startup") {
+                Toggle("Open Mac Cleaner at login", isOn: Binding(get: { loginItem.isEnabled }, set: { loginItem.setEnabled($0) }))
+                HStack(alignment: .firstTextBaseline) {
+                    Text(loginItem.statusText)
+                        .font(.caption)
+                        .foregroundStyle(loginItem.needsApproval || loginItem.errorMessage != nil ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    if loginItem.needsApproval {
+                        Button("Open Login Items Settings") { loginItem.openLoginItemsSettings() }
+                            .controlSize(.small)
+                    }
+                }
+            }
             Section {
-                Toggle("Show performance monitor in the menu bar", isOn: $settings.showMenuBarExtra)
                 Toggle("Ask for confirmation before cleaning", isOn: $settings.confirmBeforeCleaning)
                 Text("Personal files, apps and anything that needs review always ask for confirmation.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Section("Network") {
+            Section("Mac Cleaner Updates") {
+                Toggle("Check for Mac Cleaner updates automatically", isOn: $appUpdates.automaticChecksEnabled)
+                AppUpdateStatusRow(controller: appUpdates)
+                Text("Once a day, Mac Cleaner asks GitHub whether a newer version exists. Nothing is downloaded or installed until you choose to, and every download is verified first.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section("App Updates") {
                 Toggle("Check for app updates online when I ask", isOn: $settings.checkUpdatesOnline)
-                Text("Scanning and cleaning work completely offline. Update checks contact the update feeds of your apps and the App Store, only when you click “Check for Updates”.")
+                Text("Scanning and cleaning work completely offline. App update checks contact the update feeds of your apps and the App Store, only when you click “Check for Updates” on the Updates page.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Notifications") {
@@ -62,9 +98,27 @@ private struct GeneralSettingsTab: View {
                     }
                 }
             }
+            Section {
+                HStack(spacing: 12) {
+                    AppIconImage(size: 36)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(AppInfo.name) \(AppInfo.version)").font(.callout.weight(.medium))
+                        Text("Made by \(AppInfo.author) · \(AppInfo.license)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("About Mac Cleaner") {
+                        AppPresence.shared.open(windowID: AppWindowID.about, using: openWindow)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
-        .task { notificationsAllowed = await notifications.isAuthorized() }
+        .task {
+            notificationsAllowed = await notifications.isAuthorized()
+            loginItem.refresh()
+        }
     }
 }
 

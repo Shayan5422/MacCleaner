@@ -77,6 +77,7 @@ private struct StartupHeaderActions: View {
             }
             .help("Open System Settings › General › Login Items & Extensions")
         }
+        .fixedSize()
     }
 }
 
@@ -133,34 +134,38 @@ private struct StartupSummaryTiles: View {
     var model: StartupViewModel
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 12)], spacing: 12) {
+        TileRow {
             StatTile(
                 title: "Open at Login",
                 value: model.loginItemsAccess == .granted ? NumberFormatting.count(model.loginItemCount) : "—",
-                caption: model.loginItemsAccess == .granted ? "apps" : "Access needed",
+                caption: model.loginItemsAccess == .granted ? "Apps that open when you log in" : "Access needed",
                 symbol: StartupItemKind.loginItem.symbolName,
-                tint: AppSection.startup.tint
+                tint: AppSection.startup.tint,
+                fillsHeight: true
             )
             StatTile(
                 title: "Your Launch Agents",
                 value: "\(model.runningUserAgentCount) running",
                 caption: "\(model.userAgentCount) in your Library",
                 symbol: StartupItemKind.userAgent.symbolName,
-                tint: .blue
+                tint: .blue,
+                fillsHeight: true
             )
             StatTile(
                 title: "App Background Items",
                 value: NumberFormatting.count(model.appItemCount),
                 caption: "\(model.systemItemCount) system-wide items",
                 symbol: StartupItemKind.appBackgroundItem.symbolName,
-                tint: .purple
+                tint: .purple,
+                fillsHeight: true
             )
             StatTile(
                 title: "Needs Review",
                 value: NumberFormatting.count(model.needsReviewCount),
-                caption: model.needsReviewCount == 0 ? "Nothing looks unnecessary" : "may be unnecessary",
+                caption: model.needsReviewCount == 0 ? "Nothing looks unnecessary" : "May be unnecessary",
                 symbol: model.needsReviewCount == 0 ? "checkmark.circle" : "exclamationmark.circle",
-                tint: model.needsReviewCount == 0 ? .green : .orange
+                tint: model.needsReviewCount == 0 ? .green : .orange,
+                fillsHeight: true
             )
         }
     }

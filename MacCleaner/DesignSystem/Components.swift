@@ -117,12 +117,15 @@ extension View {
 struct Card<Content: View, Accessory: View>: View {
     var title: String?
     var symbol: String?
+    /// Stretch to the height the layout offers (cards side by side in a `BalancedGrid`).
+    var fillsHeight = false
     @ViewBuilder var accessory: () -> Accessory
     @ViewBuilder var content: () -> Content
 
-    init(_ title: String? = nil, symbol: String? = nil, @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }, @ViewBuilder content: @escaping () -> Content) {
+    init(_ title: String? = nil, symbol: String? = nil, fillsHeight: Bool = false, @ViewBuilder accessory: @escaping () -> Accessory = { EmptyView() }, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.symbol = symbol
+        self.fillsHeight = fillsHeight
         self.accessory = accessory
         self.content = content
     }
@@ -143,7 +146,7 @@ struct Card<Content: View, Accessory: View>: View {
             }
             content()
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: .topLeading)
         .card()
     }
 }
@@ -191,15 +194,22 @@ struct StatTile: View {
     }
 }
 
-/// A row of tiles that all get the height of the tallest one (use `StatTile(fillsHeight: true)`).
+/// A row of tiles that fill the width and all get the height of the tallest one (use
+/// `StatTile(fillsHeight: true)`). When they don't fit side by side, they wrap into
+/// balanced rows (four tiles become 2 × 2, never 3 + 1).
 struct TileRow<Content: View>: View {
+    var minimumTileWidth: CGFloat
     @ViewBuilder var content: () -> Content
 
+    init(minimumTileWidth: CGFloat = 180, @ViewBuilder content: @escaping () -> Content) {
+        self.minimumTileWidth = minimumTileWidth
+        self.content = content
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        BalancedGrid(minimumItemWidth: minimumTileWidth, spacing: 12) {
             content()
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

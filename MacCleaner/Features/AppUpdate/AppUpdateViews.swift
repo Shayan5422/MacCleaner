@@ -6,6 +6,7 @@ enum AppWindowID {
     static let main = "main"
     static let about = "about"
     static let update = "app-update"
+    static let activity = "activity"
 }
 
 /// The application icon as SwiftUI image.

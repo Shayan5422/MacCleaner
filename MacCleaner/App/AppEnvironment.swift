@@ -25,6 +25,7 @@ final class AppEnvironment {
     let security: SecurityViewModel
     let antivirus: AntivirusViewModel
     let network: NetworkViewModel
+    let guardian: GuardianController
     let automation: AutomationViewModel
     let history: HistoryViewModel
 
@@ -47,6 +48,7 @@ final class AppEnvironment {
         security = SecurityViewModel(services: services)
         antivirus = AntivirusViewModel(services: services)
         network = NetworkViewModel(services: services)
+        guardian = GuardianController(services: services)
         automation = AutomationViewModel(services: services, runnerFactory: { AppEnvironment.makeAutomationRunner() })
         history = HistoryViewModel(services: services)
     }
@@ -81,10 +83,27 @@ final class AppEnvironment {
         return runner
     }
 
-    /// Lets features open other sections (findings, dashboard tiles, notifications).
+    /// The environment of the running app, shared by its windows, the menu bar item and the app delegate.
+    static let shared = AppEnvironment()
+
+    @ObservationIgnored private var startedBackgroundServices = false
+
+    /// Starts the work that keeps running in the menu bar while no window is open: the port watch and
+    /// Network Shield, and Guardian (Startup Guard, Web Shield). Called at launch; idempotent.
+    func startBackgroundServices() {
+        connectNavigation()
+        guard !startedBackgroundServices else { return }
+        startedBackgroundServices = true
+        network.start()
+        guardian.start()
+    }
+
+    /// Lets features open other sections (findings, dashboard tiles, notifications, the menu bar).
+    /// Opening a section also brings the main window back if it was closed.
     func connectNavigation() {
         let navigation = self.navigation
-        let open: (AppSection) -> Void = { navigation.open($0) }
+        AppPresence.shared.navigation = navigation
+        let open: (AppSection) -> Void = { AppPresence.shared.openSection($0) }
         dashboard.navigate = open
         dashboard.startSmartScan = { [weak self] in
             guard let self else { return }
@@ -97,6 +116,7 @@ final class AppEnvironment {
         performance.openSection = open
         antivirus.navigate = open
         network.navigate = open
+        guardian.navigate = open
         NotificationService.shared.onOpenSection = open
     }
 

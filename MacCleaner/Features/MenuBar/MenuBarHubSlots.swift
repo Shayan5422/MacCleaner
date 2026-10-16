@@ -44,7 +44,7 @@ extension MenuBarStatus {
     /// `environment.network` (open project ports) and `environment.antivirus` (protection).
     @MainActor
     static func current(_ environment: AppEnvironment) -> MenuBarStatus {
-        MenuBarStatus()
+        MenuBarStatus(openPortCount: environment.network.openProjectPortCount)
     }
 }
 
@@ -59,25 +59,39 @@ struct MenuBarProtectionSlot: View {
     }
 }
 
-/// Open ports with Stop buttons. Placeholder until integration.
+/// Open ports with Stop buttons and port search (Ports & Network).
 struct MenuBarPortsSlot: View {
     let environment: AppEnvironment
 
     var body: some View {
-        MenuBarCard(title: "Open Ports", symbol: "point.3.connected.trianglepath.dotted", tint: AppSection.network.tint) {
-            MenuBarOpenSectionRow(text: "See which ports your projects opened and stop them.", section: .network, environment: environment)
-        }
+        NetworkMenuBarSection(model: environment.network)
+            .menuBarCardStyle()
     }
 }
 
-/// Recent protection events. Placeholder until integration (Guardian's activity feed);
-/// until then it lists the newest events of `ProtectionEventLog`.
+/// Everything the protection features noticed (Guardian's activity feed).
 struct MenuBarActivitySlot: View {
     let environment: AppEnvironment
 
     var body: some View {
-        MenuBarCard(title: "Activity", symbol: "list.bullet.rectangle", tint: AppSection.security.tint) {
-            MenuBarEventList(log: .shared, limit: 8, environment: environment)
-        }
+        ProtectionActivityFeedView(
+            log: .shared,
+            onOpen: { event in
+                if let section = event.section { AppPresence.shared.openSection(section) }
+            },
+            onShowAll: { AppPresence.shared.open(windowID: AppWindowID.activity) },
+            maximumCount: 12
+        )
+        .menuBarCardStyle()
+    }
+}
+
+extension View {
+    /// The background and padding of the hub's sections, for views that bring their own header.
+    func menuBarCardStyle() -> some View {
+        padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.045)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Color.primary.opacity(0.06)))
     }
 }

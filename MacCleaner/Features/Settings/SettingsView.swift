@@ -2,7 +2,9 @@ import SwiftUI
 
 /// The app's Settings window (⌘,).
 struct SettingsView: View {
-    let services: AppServices
+    let environment: AppEnvironment
+
+    private var services: AppServices { environment.services }
 
     var body: some View {
         TabView {
@@ -14,6 +16,10 @@ struct SettingsView: View {
                 .tabItem { Label("Exclusions", systemImage: "eye.slash") }
             PermissionsSettingsTab(permissions: services.permissions, notifications: services.notifications)
                 .tabItem { Label("Permissions", systemImage: "lock.shield") }
+            ProtectionSettingsTab(environment: environment)
+                .tabItem { Label("Protection", systemImage: "shield.lefthalf.filled") }
+            NetworkSettingsTab()
+                .tabItem { Label("Ports & Network", systemImage: "network") }
             MonitoringSettingsTab(settings: services.settings)
                 .tabItem { Label("Monitoring", systemImage: "waveform.path.ecg") }
             ActivityLogSettingsTab(logger: services.logger)

@@ -3,7 +3,7 @@ import SwiftUI
 
 struct MacCleanerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var environment = AppEnvironment()
+    @State private var environment = AppEnvironment.shared
 
     var body: some Scene {
         Window("Mac Cleaner", id: AppWindowID.main) {
@@ -28,8 +28,17 @@ struct MacCleanerApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.center)
 
+        Window("Activity", id: AppWindowID.activity) {
+            ProtectionActivityListView(log: .shared) { event in
+                if let section = event.section { AppPresence.shared.openSection(section) }
+            }
+            .frame(minWidth: 520, minHeight: 420)
+        }
+        .defaultSize(width: 620, height: 640)
+        .defaultPosition(.center)
+
         Settings {
-            SettingsView(services: environment.services)
+            SettingsView(environment: environment)
                 .environment(environment.services.permissions)
         }
 
@@ -60,6 +69,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationService.shared.activate()
         ActivityLogger.shared.info("Mac Cleaner started", category: .app)
         AppPresence.shared.start()
+        if !Self.isRunningTests {
+            // Port watch, Network Shield and Guardian keep running in the menu bar.
+            AppEnvironment.shared.startBackgroundServices()
+        }
         if !Self.isRunningTests && !Self.isCapturingScreenshots {
             AppUpdateController.shared.startAutomaticChecks()
         }
@@ -172,7 +185,7 @@ struct RootView: View {
         case .cloud: CloudStorageView(model: environment.cloud)
         case .uninstaller: UninstallerView(model: environment.uninstaller)
         case .updates: UpdatesView(model: environment.updates)
-        case .startup: StartupView(model: environment.startup)
+        case .startup: StartupView(model: environment.startup, startupGuard: environment.guardian.startupGuard)
         case .performance: PerformanceView(model: environment.performance)
         case .security: SecurityView(model: environment.security)
         case .antivirus: AntivirusView(model: environment.antivirus)

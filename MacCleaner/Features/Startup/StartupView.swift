@@ -1,22 +1,61 @@
 import SwiftUI
 
-/// Startup & Background Activity Manager.
+/// Startup & Background Activity Manager, with Guardian's view of what opened at login,
+/// what changed and every other way software starts automatically.
 struct StartupView: View {
     @Bindable var model: StartupViewModel
+    var startupGuard: StartupGuardModel
+    @State private var page: StartupPage = .items
+
+    enum StartupPage: String, CaseIterable, Identifiable {
+        case items, openedAtLogin, changes, everything
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .items: return "Startup Items"
+            case .openedAtLogin: return "Opened at Login"
+            case .changes: return "Changes"
+            case .everything: return "Background Items"
+            }
+        }
+    }
 
     var body: some View {
         PageScroll {
             PageHeader(section: .startup, subtitle: "Apps and background services that start automatically. Turn off what you don't need.") {
                 StartupHeaderActions(model: model)
             }
-            if let message = model.statusMessage {
-                StartupStatusBanner(message: message) { model.statusMessage = nil }
+            Picker("Show", selection: $page) {
+                ForEach(StartupPage.allCases) { page in
+                    Text(page.title).tag(page)
+                }
             }
-            if model.inventory == nil {
-                ScanProgressCard(title: "Reading startup items…", message: model.progressMessage,
-                                 fraction: model.isLoading ? model.progress : nil, tint: AppSection.startup.tint)
-            } else {
-                StartupContent(model: model)
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 620)
+            .accessibilityLabel("Startup Items sections")
+
+            switch page {
+            case .items:
+                if let message = model.statusMessage {
+                    StartupStatusBanner(message: message) { model.statusMessage = nil }
+                }
+                if model.inventory == nil {
+                    ScanProgressCard(title: "Reading startup items…", message: model.progressMessage,
+                                     fraction: model.isLoading ? model.progress : nil, tint: AppSection.startup.tint)
+                } else {
+                    StartupContent(model: model)
+                }
+            case .openedAtLogin:
+                StartupGuardReopenCard(model: startupGuard)
+                StartupGuardOpenedAtLoginView(model: startupGuard)
+            case .changes:
+                StartupGuardChangesView(model: startupGuard)
+            case .everything:
+                StartupGuardBackgroundItemsView(model: startupGuard)
+                StartupGuardMoreItemsView(model: startupGuard)
             }
         }
         .searchable(text: $model.searchText, placement: .toolbar, prompt: "Search startup items")

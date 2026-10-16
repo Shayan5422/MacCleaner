@@ -29,6 +29,8 @@ final class SettingsManager {
         static let hasCompletedOnboarding = "hasCompletedOnboarding"
         static let lastSmartScanDate = "lastSmartScanDate"
         static let lastSmartScanReclaimable = "lastSmartScanReclaimable"
+        /// Set once 2.0 has applied its menu bar default (see `init`).
+        static let menuBarDefaultVersion = "menuBarDefaultVersion"
     }
 
     private let defaults: UserDefaults
@@ -67,7 +69,12 @@ final class SettingsManager {
         includeHiddenFiles = snapshot.scan.includeHiddenFiles
         exclusions = snapshot.scan.exclusions
         monitorRefreshInterval = defaults.object(forKey: Key.monitorRefreshInterval) as? Double ?? 2
-        // On by default: closing the window keeps Mac Cleaner in the menu bar. A saved `false` is kept.
+        // On by default: closing the window keeps Mac Cleaner in the menu bar. 1.x saved the item as
+        // off without anyone choosing it, so 2.0 turns it on once; a later "off" is kept.
+        if defaults.integer(forKey: Key.menuBarDefaultVersion) < 2 {
+            defaults.set(2, forKey: Key.menuBarDefaultVersion)
+            defaults.set(true, forKey: Key.showMenuBarExtra)
+        }
         showMenuBarExtra = defaults.object(forKey: Key.showMenuBarExtra) as? Bool ?? true
         performanceAlertsEnabled = defaults.bool(forKey: Key.performanceAlertsEnabled)
         cpuAlertThreshold = defaults.object(forKey: Key.cpuAlertThreshold) as? Double ?? 0.9

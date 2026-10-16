@@ -529,6 +529,7 @@ final class PortPipelineSandbox: @unchecked Sendable {
             Thread.sleep(forTimeInterval: 0.05)
         }
         let processes = PortSysProc.allProcesses().filter { groups.contains($0.pgid) }
+        try cancelIfServerCantBeWatched(port: port, processes: processes)
         throw PortTestError("the throwaway server did not start listening on :\(port)" + outputTail()
                             + "; " + portVisibilityReport(port: port, processes: processes))
     }

@@ -75,25 +75,52 @@ struct PortTestError: Error, CustomStringConvertible {
     init(_ description: String) { self.description = description }
 }
 
+/// Cancels the running test when the server it started is up but this session can't watch it: something
+/// accepts connections on `port`, the kernel's listener list says one of `processes` owns it, yet that
+/// process's descriptors don't show the socket. GitHub's macOS runners hide them for the Python the tests
+/// start (a node server is visible there, and on a Mac in a user session both are), so the tests that
+/// watch servers can't observe anything there. A server that really failed to start still fails the test.
+func cancelIfServerCantBeWatched(port: UInt16, processes: [PortProcessBasic]) throws {
+    guard portAcceptsConnections(port), let listeners = PortSysProc.systemTCPListeners() else { return }
+    let owners = Set(listeners.filter { $0.port == port }.map(\.pid))
+    let hidden = processes.contains { process in
+        owners.contains(process.pid)
+            && PortSysProc.listeningTCPSockets(pid: process.pid)?.contains(where: { $0.port == port }) != true
+    }
+    guard hidden else { return }
+    try Test.cancel("The server listens on :\(port), but this session can't read its process's descriptors, so the test can't watch it")
+}
+
+/// Whether something accepts TCP connections on 127.0.0.1:`port` within `timeout`.
+func portAcceptsConnections(_ port: UInt16, timeout: TimeInterval = 2) -> Bool {
+    let fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+    guard fd >= 0 else { return false }
+    defer { close(fd) }
+    _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+    var address = sockaddr_in()
+    address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_port = port.bigEndian
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let started = withUnsafePointer(to: &address) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+            connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+        }
+    }
+    if started == 0 { return true }
+    guard errno == EINPROGRESS else { return false }
+    var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+    guard poll(&descriptor, 1, Int32(timeout * 1000)) == 1 else { return false }
+    var error: Int32 = 0
+    var length = socklen_t(MemoryLayout<Int32>.size)
+    return getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &length) == 0 && error == 0
+}
+
 /// For a server that never showed up: whether anything accepts connections on `port`, what the kernel's
 /// listener list says about it, and which of `processes` (the test's own) are still running.
 func portVisibilityReport(port: UInt16, processes: [PortProcessBasic]) -> String {
     var parts: [String] = []
-    let fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
-    if fd >= 0 {
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = port.bigEndian
-        address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        let connected = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
-            }
-        }
-        close(fd)
-        parts.append(connected ? "127.0.0.1:\(port) accepts connections" : "nothing accepts connections on 127.0.0.1:\(port)")
-    }
+    parts.append(portAcceptsConnections(port) ? "127.0.0.1:\(port) accepts connections" : "nothing accepts connections on 127.0.0.1:\(port)")
     if let listeners = PortSysProc.systemTCPListeners() {
         let owners = listeners.filter { $0.port == port }.map { String($0.pid) }
         parts.append(owners.isEmpty ? "the kernel's listener list (\(listeners.count) sockets) has nothing on it"

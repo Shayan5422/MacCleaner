@@ -234,6 +234,7 @@ final class PortThrowawayServerTree {
         }
         let output = (try? String(contentsOfFile: container + "/server-output.log", encoding: .utf8)).map { String($0.suffix(800)) } ?? ""
         let processes = PortProcessTable(processes: PortSysProc.allProcesses()).descendants(of: makePID)
+        try cancelIfServerCantBeWatched(port: port, processes: processes)
         throw PortTestError("the throwaway server did not start listening on :\(port)" + (output.isEmpty ? " (no output)" : "; output: " + output)
                             + "; " + portVisibilityReport(port: port, processes: processes))
     }

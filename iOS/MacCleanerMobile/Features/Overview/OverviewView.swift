@@ -16,6 +16,16 @@ struct OverviewView: View {
         }
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Overview")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    model.showsIntroduction = true
+                } label: {
+                    Image(systemName: "info.circle")
+                }
+                .accessibilityLabel("How Mac Cleaner works on \(model.device.deviceWord)")
+            }
+        }
         .refreshable {
             model.refreshStorage()
             await model.protection.refresh()

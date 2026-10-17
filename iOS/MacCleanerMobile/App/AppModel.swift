@@ -13,7 +13,9 @@ final class AppModel {
     let protection = ProtectionModel()
     let device = DeviceInfo.current()
     private(set) var storage: DeviceStorage? = DeviceStorage.current()
-    var selectedTab: Tab = .overview
+    var selectedTab: Tab = DebugLaunch.tab ?? .overview
+    /// The introduction, shown again from the Overview's info button.
+    var showsIntroduction = false
 
     func refreshStorage() {
         storage = DeviceStorage.current()

@@ -22,8 +22,19 @@ struct MacCleanerMobileApp: App {
 
 struct RootView: View {
     @Bindable var model: AppModel
+    @AppStorage("onboardingCompleted") private var onboardingCompleted = false
 
     var body: some View {
+        tabs
+            .fullScreenCover(isPresented: Binding(get: { !onboardingCompleted }, set: { onboardingCompleted = !$0 })) {
+                OnboardingView(device: model.device) { onboardingCompleted = true }
+            }
+            .sheet(isPresented: $model.showsIntroduction) {
+                OnboardingView(device: model.device) { model.showsIntroduction = false }
+            }
+    }
+
+    private var tabs: some View {
         TabView(selection: $model.selectedTab) {
             NavigationStack { OverviewView(model: model) }
                 .tabItem { Label("Overview", systemImage: MobileSection.overview.symbol) }

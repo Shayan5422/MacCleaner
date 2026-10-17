@@ -35,7 +35,18 @@ struct OverviewView: View {
             await model.protection.refresh()
         }
         // A library scanned before is scanned again from the cache, so the totals show without a visit.
-        .task { model.photos.screenAppeared() }
+        .task {
+            model.photos.screenAppeared()
+            await model.files.prepare()
+            // Contacts scanned before are scanned again (it takes a moment), once per launch.
+            if model.contactsScannedBefore, model.contacts.issueCount == nil {
+                let contacts = model.contacts
+                Task {
+                    contacts.refreshAccess()
+                    await contacts.scan()
+                }
+            }
+        }
     }
 
     // MARK: Storage
@@ -95,7 +106,8 @@ struct OverviewView: View {
                     QuickAction(section: .contacts, detail: model.contacts.issueCount.map { NumberFormatting.count($0, "issue") } ?? "Scan")
                 }
                 NavigationLink { FilesHomeView(model: model.files) } label: {
-                    QuickAction(section: .files, detail: model.files.reclaimableBytes.map(ByteFormatting.string) ?? "Choose folders")
+                    QuickAction(section: .files, detail: model.files.reclaimableBytes.map(ByteFormatting.string)
+                                ?? (model.files.folders.isEmpty ? "Choose folders" : "Scan"))
                 }
             }
             .buttonStyle(.plain)

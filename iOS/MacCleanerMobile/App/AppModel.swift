@@ -17,6 +17,12 @@ final class AppModel {
     /// The introduction, shown again from the Overview's info button.
     var showsIntroduction = false
 
+    /// Contacts were scanned in an earlier session, so the Overview may scan them again on its own.
+    var contactsScannedBefore: Bool {
+        get { UserDefaults.standard.bool(forKey: "contacts.scannedBefore") }
+        set { UserDefaults.standard.set(newValue, forKey: "contacts.scannedBefore") }
+    }
+
     func refreshStorage() {
         storage = DeviceStorage.current()
     }

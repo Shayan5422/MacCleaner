@@ -11,8 +11,18 @@ enum DebugLaunch {
         #endif
     }
 
+    /// `-debugOpen photos|videos|contacts|files`: opens that screen in the Clean tab and starts its scan.
+    static var openSection: MobileSection? {
+        #if DEBUG
+        return UserDefaults.standard.string(forKey: "debugOpen").flatMap(MobileSection.init(rawValue:))
+        #else
+        return nil
+        #endif
+    }
+
     static var tab: AppModel.Tab? {
         #if DEBUG
+        if openSection != nil { return .clean }
         switch UserDefaults.standard.string(forKey: "debugTab") {
         case "overview": return .overview
         case "clean": return .clean

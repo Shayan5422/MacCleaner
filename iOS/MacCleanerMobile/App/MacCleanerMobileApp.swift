@@ -32,6 +32,9 @@ struct RootView: View {
             .sheet(isPresented: $model.showsIntroduction) {
                 OnboardingView(device: model.device) { model.showsIntroduction = false }
             }
+            .onChange(of: model.contacts.issueCount != nil) { _, scanned in
+                if scanned { model.contactsScannedBefore = true }
+            }
     }
 
     private var tabs: some View {

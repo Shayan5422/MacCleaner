@@ -3,6 +3,8 @@ import SwiftUI
 /// The Clean tab: one row per kind of clutter the app can remove itself.
 struct CleanHomeView: View {
     var model: AppModel
+    /// A screen opened by `-debugOpen` (DEBUG builds only).
+    @State private var opened: MobileSection? = DebugLaunch.openSection
 
     var body: some View {
         List {
@@ -25,6 +27,32 @@ struct CleanHomeView: View {
             }
         }
         .navigationTitle("Clean")
+        .navigationDestination(item: $opened) { section in
+            switch section {
+            case .photos: PhotosHomeView(model: model.photos)
+            case .videos: VideosHomeView(model: model.photos)
+            case .contacts: ContactsHomeView(model: model.contacts)
+            default: FilesHomeView(model: model.files)
+            }
+        }
+        .task {
+            #if DEBUG
+            switch DebugLaunch.openSection {
+            case .photos?, .videos?: model.photos.startScan()
+            case .contacts?:
+                // Not tied to this view: it disappears (and its task is cancelled) when the screen opens.
+                let contacts = model.contacts
+                Task {
+                    contacts.refreshAccess()
+                    await contacts.scan()
+                }
+            case .files?:
+                await model.files.prepare()
+                model.files.scan()
+            default: break
+            }
+            #endif
+        }
     }
 }
 

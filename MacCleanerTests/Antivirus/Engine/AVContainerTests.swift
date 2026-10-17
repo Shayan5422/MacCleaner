@@ -87,6 +87,63 @@ struct AVContainerTests {
         return cvd.prefix(512) + tar
     }
 
+    /// The same `.cld` with `extra` files at the end of its tar.
+    private func makeCLD(fromCVD url: URL, adding extra: [(String, Data)]) throws -> Data {
+        let cld = try makeCLD(fromCVD: url)
+        let tar = cld.dropFirst(512)
+        let listing = tar.withUnsafeBytes { AVTarReader.list(AVByteView($0)) }
+        let last = try #require(listing.entries.max { $0.dataOffset < $1.dataOffset })
+        let end = (last.dataOffset + last.size + 511) / 512 * 512
+        return cld.prefix(512) + tar.prefix(end) + AVFixtures.tar(extra)
+    }
+
+    @Test func freshclamPatchRecordNames() {
+        #expect(ClamAVContainer.isAppliedPatchRecord("daily-28156.cdiff", database: "daily"))
+        #expect(ClamAVContainer.isAppliedPatchRecord("daily-28156.cdiff.sign", database: "daily"))
+        for name in ["daily.hdb", "daily.info", "main-63.cdiff", "daily-.cdiff", "daily-28156.sign", "daily-28156.cdiff.hdb",
+                     "daily-28l56.cdiff", "daily28156.cdiff", "daily-28156.cdiff.sign.sign"] {
+            #expect(!ClamAVContainer.isAppliedPatchRecord(name, database: "daily"), "\(name)")
+        }
+    }
+
+    @Test func freshclamPatchRecordsAreLeftOutOfACLD() throws {
+        let directory = AVTestDirectory()
+        let cld = AVFixtures.cld(name: "daily", files: [
+            ("daily.info", Data("ClamAV-VDB:17 Oct 2026 06-25 +0000:28156:1:90:X:X:test:1792218346\ndaily.hdb:4:x\n".utf8)),
+            ("daily.hdb", Data("x\n".utf8)),
+            ("daily-28156.cdiff", Data("OPEN daily.info\nCLOSE\n".utf8)),
+            ("daily-28156.cdiff.sign", Data("detached signature".utf8)),
+        ])
+        let unpacked = try ClamAVContainer.unpack(at: try directory.write("daily.cld", cld))
+        #expect(unpacked.fileNames == ["daily.hdb", "daily.info"])
+    }
+
+    /// A `.cld` freshclam 1.5 really wrote (MACCLEANER_FRESHCLAM_CLD=<path>): it verifies and compiles.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MACCLEANER_FRESHCLAM_CLD"] != nil)) func realFreshclam15CLDVerifies() throws {
+        let url = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["MACCLEANER_FRESHCLAM_CLD"]))
+        let header = try ClamAVDatabaseFile.verify(at: url)
+        #expect(header.verification == .signedIndex)
+        let directory = AVTestDirectory()
+        let summary = try AVDatabaseCompiler.compile(AVDatabaseInputs(clamavFiles: [url]), into: directory.file("db"))
+        #expect(summary.signatureCount > 100_000)
+        _ = try AVEngine.load(from: directory.file("db"))
+    }
+
+    /// freshclam 1.5 keeps the patches it applied, with their detached signatures, in the `.cld`
+    /// ("daily-28156.cdiff", "daily-28156.cdiff.sign"). They're accepted and left out; any other file
+    /// the signed index doesn't list still makes the database invalid.
+    @Test(.enabled(if: AVRealDatabase.isAvailable)) func cldWithFreshclamPatchRecordsVerifies() throws {
+        let cvd = try #require(AVRealDatabase.dailyCVD)
+        let directory = AVTestDirectory()
+        let patches = [("daily-28156.cdiff", Data("OPEN daily.info\nCLOSE\n".utf8)), ("daily-28156.cdiff.sign", Data("detached signature".utf8))]
+        let patched = try directory.write("daily.cld", try makeCLD(fromCVD: cvd, adding: patches))
+        #expect(try ClamAVDatabaseFile.verify(at: patched).verification == .signedIndex)
+        #expect(!(try ClamAVContainer.unpack(at: patched).fileNames.contains { $0.contains(".cdiff") }))
+
+        let unlisted = try directory.write("unlisted.cld", try makeCLD(fromCVD: cvd, adding: [("extra.hdb", Data("44d88612fea8a8f36de82e1278abb02f:68:Extra.Signature\n".utf8))]))
+        #expect(throws: AVEngineError.self) { try ClamAVDatabaseFile.verify(at: unlisted) }
+    }
+
     @Test(.enabled(if: AVRealDatabase.isAvailable)) func realCVDsVerify() throws {
         for url in [AVRealDatabase.mainCVD, AVRealDatabase.dailyCVD].compactMap({ $0 }) {
             let header = try ClamAVDatabaseFile.verify(at: url)

@@ -255,7 +255,6 @@ enum ClamAVContainer {
             }
             entries[name] = entry
         }
-        var unpacked = ClamAVUnpackedDatabase(header: header, tar: tar, entries: entries)
 
         // The index is named after the database ("daily.info"); fall back to the only .info file.
         let infoNames = entries.keys.filter { $0.hasSuffix(".info") }
@@ -264,6 +263,11 @@ enum ClamAVContainer {
             let realName = String(infoName.dropLast(5))
             if realName != header.name { header.name = realName }
         }
+        // freshclam 1.5 keeps the patches it applied, with their detached signatures, in the `.cld`
+        // ("daily-28156.cdiff", "daily-28156.cdiff.sign"). The signed index doesn't list them and they
+        // hold no signatures, so they're left out; any other unlisted file is still refused below.
+        entries = entries.filter { !isAppliedPatchRecord($0.key, database: header.name) }
+        var unpacked = ClamAVUnpackedDatabase(header: header, tar: tar, entries: entries)
         guard requireIndexSignature else {
             unpacked.header = header
             return unpacked
@@ -301,6 +305,17 @@ enum ClamAVContainer {
         header.verification = .signedIndex
         unpacked.header = header
         return unpacked
+    }
+
+    /// `<database>-<version>.cdiff` or `<database>-<version>.cdiff.sign`: a patch freshclam applied
+    /// to the `.cld`, or its detached signature.
+    static func isAppliedPatchRecord(_ name: String, database: String) -> Bool {
+        guard !database.isEmpty, name.hasPrefix(database + "-") else { return false }
+        var rest = name.dropFirst(database.count + 1)
+        if rest.hasSuffix(".sign") { rest = rest.dropLast(5) }
+        guard rest.hasSuffix(".cdiff") else { return false }
+        let version = rest.dropLast(6)
+        return !version.isEmpty && version.allSatisfy { $0.isASCII && $0.isNumber }
     }
 
     struct Index {

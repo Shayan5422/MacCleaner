@@ -68,10 +68,14 @@ struct AVUpdaterRig {
     var paths: AVPaths { directory.paths }
 
     func updater() -> AVDefinitionsUpdater {
+        AVDefinitionsUpdater(environment: environment())
+    }
+
+    func environment() -> AVDefinitionsUpdater.Environment {
         let clock = self.clock
         let tool = freshclam
         let run = runFreshclam
-        return AVDefinitionsUpdater(environment: AVDefinitionsUpdater.Environment(
+        return AVDefinitionsUpdater.Environment(
             paths: paths, transport: transport, versionLookup: versions, toolkit: toolkit, verifier: AVAcceptingVerifier(),
             userAgent: AVUserAgent.make(appVersion: "2.0.0"),
             locateFreshclam: { tool },
@@ -80,7 +84,7 @@ struct AVUpdaterRig {
                 return try await run(tool, paths, progress)
             },
             now: { clock.now }
-        ))
+        )
     }
 
     /// Settings with the abuse.ch feeds off unless asked for (most tests are about ClamAV).
@@ -483,5 +487,39 @@ struct AVUpdaterTests {
         #expect(found == "/usr/local/bin/freshclam")
         let missing = await AVFreshclamLocator.locate(candidates: ["/nonexistent/freshclam"], isExecutable: { _ in false }, brew: nil)
         #expect(missing == nil)
+    }
+}
+
+/// While the app runs, automatic updates keep a full interval between checks, also after one fails
+/// (a failure used to be retried within a minute, again and again).
+@MainActor
+@Suite("Antivirus automatic update schedule")
+struct AVAutomaticUpdateScheduleTests {
+    @Test func aFailedUpdateIsNotRetriedBeforeTheInterval() async throws {
+        let rig = try AVUpdaterRig(main: 63, daily: 28155)   // nothing is served: every download fails
+        try rig.paths.prepare()
+        var state = AVDefinitionsState()
+        state.firstInstallRequested = true
+        try AVStateFile(url: rig.paths.stateFile).save(state)
+        let defaults = try #require(UserDefaults(suiteName: "AVSchedule-\(UUID().uuidString)"))
+        let services = AppServices(settings: SettingsManager(defaults: defaults), permissions: PermissionManager(),
+                                   history: HistoryStore(directory: rig.directory.child("History")),
+                                   logger: ActivityLogger(directory: rig.directory.child("Logs")))
+        var environment = AntivirusEnvironment(paths: rig.paths, engine: AVEngineHolder(), intel: AVIntelHolder(),
+                                               updater: rig.environment(), makeEventSource: { AVFakeEventSource() },
+                                               home: rig.directory.path)
+        environment.firstAutoUpdateDelay = 0.05
+        environment.autoUpdateInterval = 3600
+        environment.startsShields = false
+        let model = AntivirusViewModel(services: services, environment: environment, defaults: defaults,
+                                       eventLog: ProtectionEventLog(directory: nil))
+        model.start()
+
+        try await Task.sleep(for: .seconds(2))
+        // Stop the schedule first, so a regression can't keep the test host busy after the test.
+        model.settings.automaticUpdates = false
+        model.scheduleAutomaticUpdates()
+        let problems = await services.logger.recentEvents().filter { $0.message.contains("definitions update problem") }
+        #expect(problems.count == 1, "\(problems.map(\.message))")
     }
 }

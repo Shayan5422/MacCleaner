@@ -353,16 +353,18 @@ final class AntivirusViewModel {
         if let problem = outcome.problem { services.logger.warning("Antivirus: definitions update problem: \(problem)", category: AVLog.category) }
         if firstInstall && isRealTimeProtectionOn { requestNotificationPermission() }
         refreshShields()
-        scheduleAutomaticUpdates()
+        scheduleAutomaticUpdates(afterUpdate: true)
     }
 
     /// Automatic updates while the app runs (only after the first install, never in Low Power Mode).
-    func scheduleAutomaticUpdates() {
+    /// The first check comes shortly after launch; after any update, successful or not, the next one
+    /// waits a full interval (a failure used to be retried within a minute, again and again).
+    func scheduleAutomaticUpdates(afterUpdate: Bool = false) {
         autoUpdateTask?.cancel()
         autoUpdateTask = nil
         guard settings.automaticUpdates, definitionsState.firstInstallRequested else { return }
         let interval = environment.autoUpdateInterval
-        let delay = environment.firstAutoUpdateDelay
+        let delay = afterUpdate ? interval : environment.firstAutoUpdateDelay
         autoUpdateTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             while !Task.isCancelled {

@@ -18,8 +18,8 @@ settings:
     # "-" signs to run locally. Set DEVELOPMENT_TEAM (or override in Xcode) for Developer ID builds.
     CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
-    MARKETING_VERSION: "2.0.0"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "2.0.1"
+    CURRENT_PROJECT_VERSION: "3"
     SWIFT_STRICT_CONCURRENCY: complete
     GCC_TREAT_WARNINGS_AS_ERRORS: NO
 targets:

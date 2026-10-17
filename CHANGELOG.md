@@ -2,6 +2,12 @@
 
 All notable changes to Mac Cleaner are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] — 2026-10-17
+
+### Fixed
+- Virus definitions updated by ClamAV 1.5's freshclam (for example after "Install ClamAV with Homebrew") were refused as damaged, so the antivirus stayed on the previous definitions. freshclam 1.5 keeps the patches it applied, with their signatures, inside `daily.cld`; they're now accepted, while any other file the signed index doesn't list is still refused.
+- After a failed definitions update, Mac Cleaner tried again every 45 seconds, preparing the definitions each time. It now waits for the next hourly check.
+
 ## [2.0.0] — 2026-10-16
 
 Mac Cleaner becomes the assistant that watches over your Mac: an antivirus with free, self-updating virus definitions, real-time shields, PortPilot's port manager, a startup guard and a menu bar hub that keeps running when the window is closed.

@@ -11,7 +11,7 @@ struct CleanHomeView: View {
                     CleanRow(section: .photos, summary: model.photos.summary ?? "Duplicates, similar photos, screenshots and bursts")
                 }
                 NavigationLink { VideosHomeView(model: model.photos) } label: {
-                    CleanRow(section: .videos, summary: model.photos.videoReclaimableBytes.map { "\(ByteFormatting.string($0)) in large videos" }
+                    CleanRow(section: .videos, summary: model.photos.videoReclaimableBytes.map { "\(ByteFormatting.string($0)) in large videos and screen recordings" }
                              ?? "Large videos and screen recordings")
                 }
                 NavigationLink { ContactsHomeView(model: model.contacts) } label: {

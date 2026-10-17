@@ -3,6 +3,10 @@ import SwiftUI
 /// The first page: storage, what can be cleaned, protection and the guides that help now.
 struct OverviewView: View {
     var model: AppModel
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    /// Accessibility text sizes: cards stack vertically and the shortcuts use one column.
+    private var isLargeText: Bool { dynamicTypeSize.isAccessibilitySize }
 
     var body: some View {
         ScrollView {
@@ -30,22 +34,30 @@ struct OverviewView: View {
             model.refreshStorage()
             await model.protection.refresh()
         }
+        // A library scanned before is scanned again from the cache, so the totals show without a visit.
+        .task { model.photos.screenAppeared() }
     }
 
     // MARK: Storage
 
     private var storageCard: some View {
         Card {
-            HStack(spacing: 18) {
+            let layout = isLargeText ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14)) : AnyLayout(HStackLayout(spacing: 18))
+            layout {
                 RingGauge(fraction: model.storage?.usedFraction ?? 0,
                           tint: (model.storage?.isLow ?? false) ? .orange : MobileSection.overview.tint) {
                     VStack(spacing: 0) {
                         Text(model.storage.map { NumberFormatting.percent($0.usedFraction) } ?? "—")
                             .font(.title3.weight(.bold)).monospacedDigit()
+                            .lineLimit(1).minimumScaleFactor(0.5)
                         Text("used").font(.caption2).foregroundStyle(.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.5)
                     }
+                    .padding(.horizontal, 6)
+                    // Inside the ring there's only so much room; the card's other text keeps growing.
+                    .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 }
-                .frame(width: 96, height: 96)
+                .frame(width: isLargeText ? 120 : 96, height: isLargeText ? 120 : 96)
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(model.device.deviceWord) storage").font(.headline)
                     if let storage = model.storage {
@@ -72,7 +84,7 @@ struct OverviewView: View {
     private var cleanCard: some View {
         Card {
             Text("Clean up").font(.headline)
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: isLargeText ? 1 : 2), spacing: 12) {
                 NavigationLink { PhotosHomeView(model: model.photos) } label: {
                     QuickAction(section: .photos, detail: model.photos.photoReclaimableBytes.map(ByteFormatting.string) ?? "Scan")
                 }

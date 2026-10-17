@@ -9,14 +9,21 @@
 /* Begin PBXBuildFile section */
 		024F562AD3789C4E03DD16C7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 36E738D4415731DE90683D5A /* Assets.xcassets */; };
 		06BF7DB45DE21571AB5FBE2B /* LinkCheck.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3BD32C5EBC5A2C902AD7182 /* LinkCheck.swift */; };
+		074753D0ADEA64C36A8E6FA0 /* MediaPreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9175BAC5DD3985FA3A81032 /* MediaPreviewView.swift */; };
 		08B9063FF96077506E899FEB /* ProtectionHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9269DDAAA107146F3382B76 /* ProtectionHomeView.swift */; };
+		0BE45222111F189E0F0E4BE3 /* PhotoLibraryScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3883B1045F1356010A38D94 /* PhotoLibraryScanner.swift */; };
 		0CDFC26D41B12B65D53B66CC /* ProtectionComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356659E9ADAFFD392AA128AE /* ProtectionComponents.swift */; };
 		109400F61BBCD574129B5B75 /* SoftwareUpdate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDFD2B9EF4CB58F05CB80930 /* SoftwareUpdate.swift */; };
+		11815FC09A78567E1619CBA3 /* PhotoFixtures.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E1701DF96A2734F2DC9779 /* PhotoFixtures.swift */; };
+		11E5E6EDDFB0454748D72CE5 /* PhotoGroupingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA291DAF81679371954FBF2B /* PhotoGroupingTests.swift */; };
 		1773D98046E60B59A79F73AD /* SecurityChecks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3109A132BE737469B3B0200E /* SecurityChecks.swift */; };
 		2435BA230A54A30435F9FC35 /* FeedUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25031432A55EFC1EA9270B64 /* FeedUpdater.swift */; };
 		2FE61EDB967CD3C0372296E0 /* GuideProgress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 732688FD2AD31E27F5EC6C1C /* GuideProgress.swift */; };
+		35568F61993B825E56324626 /* PerceptualHash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 459EA69371284B9EC22DC701 /* PerceptualHash.swift */; };
 		394D62AFE0FE36542F13C31D /* ThreatFeedParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F31899D9AD55CC706F5F455D /* ThreatFeedParsingTests.swift */; };
+		3F022EC19DD35849A2EFCBB4 /* PhotoScanResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = E017B65D9AA1306B9D463102 /* PhotoScanResult.swift */; };
 		44FD2936ACE90F4593214A35 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A4FA1F588EF79069EF641C8 /* Theme.swift */; };
+		56CBF8B210EC6FDF5F4E8317 /* PhotoWordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0C6D7455DA2CC9CD405B375 /* PhotoWordingTests.swift */; };
 		56EBE1D0BED7F9DD203AF729 /* LinkCheckTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7FEC9A35341E8F00B21643 /* LinkCheckTests.swift */; };
 		5E7BB86A04BF2A0544E57361 /* SoftwareUpdateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2963AE34E22D258B0066D2E1 /* SoftwareUpdateTests.swift */; };
 		662D50C82BC89B0D063596CB /* ProtectionStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B637A6967F3271B92BC58FA4 /* ProtectionStatusTests.swift */; };
@@ -25,28 +32,44 @@
 		7549753451028F5AAD2AED64 /* SafariBlocklistTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F597698521430E20B4433343 /* SafariBlocklistTests.swift */; };
 		76961182F3AB01844FC52C56 /* ThreatFeeds.swift in Sources */ = {isa = PBXBuildFile; fileRef = 795B071BBCFA99EE74575C14 /* ThreatFeeds.swift */; };
 		79852B2837C62AD16B8237DE /* ProtectionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16B7A377BC496FFB31B7BEE /* ProtectionModel.swift */; };
+		7CFCDD69E0C51D8621C36E92 /* MediaSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72CA3BCBD37945620990FE97 /* MediaSizingTests.swift */; };
 		853238ABBB5B731EE41AC6D0 /* ProtectionModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 358F96F81445DFDCF88FCAE6 /* ProtectionModelTests.swift */; };
 		85EB15D2553C65226341AE45 /* ThreatIntel.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABD2262E31F0B1E5B65A21B5 /* ThreatIntel.swift */; };
 		86C47D4E07D33404CF21F665 /* DebugLaunch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BF3263BE5C34E104FC8A8EE /* DebugLaunch.swift */; };
 		87807DDB81058C439C068CCF /* ContactCleanupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEE33271BCA091B28C22CE2A /* ContactCleanupModel.swift */; };
+		89AC5DE103F65DFE36B08D03 /* PhotoScanCacheTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 490F678A4B044FBE16AE72BE /* PhotoScanCacheTests.swift */; };
 		8B59D51EE94A0E9B433D9891 /* FeedUpdaterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60987C445A9B8B382760F2DD /* FeedUpdaterTests.swift */; };
+		8FC5E87EF763195A3D56FF0F /* VideosHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A49C1FD35CC7B29883D8BE02 /* VideosHomeView.swift */; };
 		90F5A6B37B4DBA0B4A277F90 /* CleanHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1BD9D1055270A86097EE10C /* CleanHomeView.swift */; };
+		92FF4C234FF5DE70F1DC1240 /* MediaThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE506971E8DFB6A964FBD91E /* MediaThumbnail.swift */; };
 		9768BE2B9C67C1CDFC242A02 /* ProtectionTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F8C0D8DC381CEDFC7E8ABA2 /* ProtectionTestSupport.swift */; };
 		9A031D99190CA0771D2E2325 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B5FDDF45999A579B419CD3A /* AppModel.swift */; };
+		9AE0E8C07AD6B3ADCB3E627A /* PhotoScanCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA344F4F1246DED64367864 /* PhotoScanCache.swift */; };
 		9DE798721850BEBE29BB0F28 /* FileCleanupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3332DC6D1F7EF628BEE861D6 /* FileCleanupModel.swift */; };
 		9E6056D125783D21C4BA3EA6 /* SafariBlocklist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 067EA343AED4DED32A31F2C2 /* SafariBlocklist.swift */; };
+		9ECFCF44F7D8E708FD25E2FA /* PhotoLibraryStatusViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 774F67204DDBC8C528559979 /* PhotoLibraryStatusViews.swift */; };
 		A253758447B42D405C608876 /* LinkCheckView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1B79A9763E12F824820940A /* LinkCheckView.swift */; };
 		A5D661C33F7D7F31B9F7B43D /* ContentBlocker.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4CB706E71802E02170962425 /* ContentBlocker.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		A854DD775CAB49FEBE89DB9D /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5625E26EFFA02C95B160D62D /* Components.swift */; };
+		A917590B46BEE87FE3CFCB4E /* MediaSizing.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8441925EE646530028364B0 /* MediaSizing.swift */; };
+		ABAB019D05FD0529FF6C1F30 /* MediaItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F1A1995EE03D16FD51D0D08 /* MediaItem.swift */; };
+		B2D9897753DC4A59F962773C /* PhotoLibraryAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = D518DC986E6702AB869A19D1 /* PhotoLibraryAccess.swift */; };
+		B35CA5B780ECCF8F9F87EE7B /* PhotoGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2B2DEFB2DA02A7132AA782 /* PhotoGrouping.swift */; };
 		B9989E4263662E5F21C57126 /* MacCleanerMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B685567449923AA157903448 /* MacCleanerMobileApp.swift */; };
+		BC55149696CF23820F249FA8 /* PhotosHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A54992A4986D9F2CBF6CF9F /* PhotosHomeView.swift */; };
 		BE73A35D2FAFC2CFDCCE07B3 /* FormattingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEF8762FCD4389EBA2343DD1 /* FormattingTests.swift */; };
 		BE9F5F6D1D03762B4F6B934F /* GuidesHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FAB2EE0DFAB80FE38DCB31F /* GuidesHomeView.swift */; };
+		C8088BD0117C04DC003440A1 /* SyntheticImages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3314B3E08A6226980DDD50B0 /* SyntheticImages.swift */; };
 		D88C85CBECD6E66455E9BD91 /* OverviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E98289B2A40CBBFB911B1FD6 /* OverviewView.swift */; };
 		DAD708CEA611B4C5DF468B90 /* ContentBlockerRequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A4B812CF1356AF83E4CC469 /* ContentBlockerRequestHandler.swift */; };
 		DC954B735280D7EBB4543040 /* GuideContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = E11D721130A4B0E70C0F2036 /* GuideContent.swift */; };
+		E16054AF0542701695EEDEE3 /* PhotoCategoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B22D75198779118C0B788C0B /* PhotoCategoryView.swift */; };
 		F1194A8AC0315DE9791834CF /* blockerList.json in Resources */ = {isa = PBXBuildFile; fileRef = B662199AB5D89179B0430D49 /* blockerList.json */; };
 		F2D696500A5156C5A0C98AE8 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73760C6BC09B729C4EB332F1 /* OnboardingView.swift */; };
+		F71ECC04E9FF952F5297001D /* PerceptualHashTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 414C8E690DC46A40E973CD9E /* PerceptualHashTests.swift */; };
+		F8DB8A533367D2823057B7E2 /* PhotoCleanupComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE79DC84C513B25E9FBDA3B2 /* PhotoCleanupComponents.swift */; };
 		F9953A4DDE18AB720A1C512E /* GuideLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33145A76EEDD8FF9EB35A74E /* GuideLibrary.swift */; };
+		FAEAC09729082700979B6A53 /* PhotoKeepRankingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40F8F4BDEA92DDD4D8C0638B /* PhotoKeepRankingTests.swift */; };
 		FD5C37E83A75E8590FE34946 /* GuideDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2546F9C55E14008F92934721 /* GuideDetailView.swift */; };
 		FD89644D18DDDBF430924CBD /* Formatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 205D482AD9C739F7E96E977E /* Formatting.swift */; };
 		FF87C079389B7BDC4DFA4860 /* GuideLibraryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C381509B7778F9CB89D7E1AD /* GuideLibraryTests.swift */; };
@@ -85,6 +108,7 @@
 
 /* Begin PBXFileReference section */
 		067EA343AED4DED32A31F2C2 /* SafariBlocklist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariBlocklist.swift; sourceTree = "<group>"; };
+		0D2B2DEFB2DA02A7132AA782 /* PhotoGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGrouping.swift; sourceTree = "<group>"; };
 		0F8C0D8DC381CEDFC7E8ABA2 /* ProtectionTestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectionTestSupport.swift; sourceTree = "<group>"; };
 		17525627BA6CCAE57E9A3847 /* PhotoCleanupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCleanupModel.swift; sourceTree = "<group>"; };
 		18D327F58B0A732C539F57B7 /* MacCleanerMobile.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MacCleanerMobile.entitlements; sourceTree = "<group>"; };
@@ -97,24 +121,37 @@
 		2B7FEC9A35341E8F00B21643 /* LinkCheckTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkCheckTests.swift; sourceTree = "<group>"; };
 		3109A132BE737469B3B0200E /* SecurityChecks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityChecks.swift; sourceTree = "<group>"; };
 		33145A76EEDD8FF9EB35A74E /* GuideLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideLibrary.swift; sourceTree = "<group>"; };
+		3314B3E08A6226980DDD50B0 /* SyntheticImages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntheticImages.swift; sourceTree = "<group>"; };
 		3332DC6D1F7EF628BEE861D6 /* FileCleanupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileCleanupModel.swift; sourceTree = "<group>"; };
 		356659E9ADAFFD392AA128AE /* ProtectionComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectionComponents.swift; sourceTree = "<group>"; };
 		358F96F81445DFDCF88FCAE6 /* ProtectionModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectionModelTests.swift; sourceTree = "<group>"; };
 		36E738D4415731DE90683D5A /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		40F8F4BDEA92DDD4D8C0638B /* PhotoKeepRankingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoKeepRankingTests.swift; sourceTree = "<group>"; };
+		414C8E690DC46A40E973CD9E /* PerceptualHashTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerceptualHashTests.swift; sourceTree = "<group>"; };
+		459EA69371284B9EC22DC701 /* PerceptualHash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerceptualHash.swift; sourceTree = "<group>"; };
+		490F678A4B044FBE16AE72BE /* PhotoScanCacheTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoScanCacheTests.swift; sourceTree = "<group>"; };
 		4B5FDDF45999A579B419CD3A /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModel.swift; sourceTree = "<group>"; };
 		4CB706E71802E02170962425 /* ContentBlocker.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = ContentBlocker.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		4F1A1995EE03D16FD51D0D08 /* MediaItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaItem.swift; sourceTree = "<group>"; };
 		5625E26EFFA02C95B160D62D /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		60987C445A9B8B382760F2DD /* FeedUpdaterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedUpdaterTests.swift; sourceTree = "<group>"; };
 		6A4FA1F588EF79069EF641C8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		6BF3263BE5C34E104FC8A8EE /* DebugLaunch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLaunch.swift; sourceTree = "<group>"; };
+		72CA3BCBD37945620990FE97 /* MediaSizingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaSizingTests.swift; sourceTree = "<group>"; };
 		732688FD2AD31E27F5EC6C1C /* GuideProgress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideProgress.swift; sourceTree = "<group>"; };
 		73760C6BC09B729C4EB332F1 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		774F67204DDBC8C528559979 /* PhotoLibraryStatusViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryStatusViews.swift; sourceTree = "<group>"; };
 		795B071BBCFA99EE74575C14 /* ThreatFeeds.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreatFeeds.swift; sourceTree = "<group>"; };
+		7AA344F4F1246DED64367864 /* PhotoScanCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoScanCache.swift; sourceTree = "<group>"; };
 		8A4B812CF1356AF83E4CC469 /* ContentBlockerRequestHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentBlockerRequestHandler.swift; sourceTree = "<group>"; };
+		8A54992A4986D9F2CBF6CF9F /* PhotosHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosHomeView.swift; sourceTree = "<group>"; };
 		9CB9E894A328A14AC831A9B4 /* DeviceInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceInfo.swift; sourceTree = "<group>"; };
 		A3BD32C5EBC5A2C902AD7182 /* LinkCheck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkCheck.swift; sourceTree = "<group>"; };
+		A49C1FD35CC7B29883D8BE02 /* VideosHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideosHomeView.swift; sourceTree = "<group>"; };
 		ABD2262E31F0B1E5B65A21B5 /* ThreatIntel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreatIntel.swift; sourceTree = "<group>"; };
 		AE2A344DC8AF12730E4302E9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		AE506971E8DFB6A964FBD91E /* MediaThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaThumbnail.swift; sourceTree = "<group>"; };
+		B22D75198779118C0B788C0B /* PhotoCategoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCategoryView.swift; sourceTree = "<group>"; };
 		B637A6967F3271B92BC58FA4 /* ProtectionStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectionStatusTests.swift; sourceTree = "<group>"; };
 		B662199AB5D89179B0430D49 /* blockerList.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = blockerList.json; sourceTree = "<group>"; };
 		B685567449923AA157903448 /* MacCleanerMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCleanerMobileApp.swift; sourceTree = "<group>"; };
@@ -122,15 +159,24 @@
 		C1B79A9763E12F824820940A /* LinkCheckView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkCheckView.swift; sourceTree = "<group>"; };
 		C1BD9D1055270A86097EE10C /* CleanHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanHomeView.swift; sourceTree = "<group>"; };
 		C381509B7778F9CB89D7E1AD /* GuideLibraryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideLibraryTests.swift; sourceTree = "<group>"; };
+		D518DC986E6702AB869A19D1 /* PhotoLibraryAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryAccess.swift; sourceTree = "<group>"; };
+		D5E1701DF96A2734F2DC9779 /* PhotoFixtures.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoFixtures.swift; sourceTree = "<group>"; };
+		D8441925EE646530028364B0 /* MediaSizing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaSizing.swift; sourceTree = "<group>"; };
 		DEE33271BCA091B28C22CE2A /* ContactCleanupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactCleanupModel.swift; sourceTree = "<group>"; };
 		DEF8762FCD4389EBA2343DD1 /* FormattingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormattingTests.swift; sourceTree = "<group>"; };
+		E017B65D9AA1306B9D463102 /* PhotoScanResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoScanResult.swift; sourceTree = "<group>"; };
+		E0C6D7455DA2CC9CD405B375 /* PhotoWordingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoWordingTests.swift; sourceTree = "<group>"; };
 		E11D721130A4B0E70C0F2036 /* GuideContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuideContent.swift; sourceTree = "<group>"; };
+		E3883B1045F1356010A38D94 /* PhotoLibraryScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryScanner.swift; sourceTree = "<group>"; };
 		E8341903F0FF28FAC3115390 /* MacCleanerMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MacCleanerMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E9175BAC5DD3985FA3A81032 /* MediaPreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPreviewView.swift; sourceTree = "<group>"; };
 		E9269DDAAA107146F3382B76 /* ProtectionHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProtectionHomeView.swift; sourceTree = "<group>"; };
 		E98289B2A40CBBFB911B1FD6 /* OverviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewView.swift; sourceTree = "<group>"; };
+		EE79DC84C513B25E9FBDA3B2 /* PhotoCleanupComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoCleanupComponents.swift; sourceTree = "<group>"; };
 		F151AF4F0D263710330B9D3E /* MacCleanerMobileTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MacCleanerMobileTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F31899D9AD55CC706F5F455D /* ThreatFeedParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThreatFeedParsingTests.swift; sourceTree = "<group>"; };
 		F597698521430E20B4433343 /* SafariBlocklistTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariBlocklistTests.swift; sourceTree = "<group>"; };
+		FA291DAF81679371954FBF2B /* PhotoGroupingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoGroupingTests.swift; sourceTree = "<group>"; };
 		FDFD2B9EF4CB58F05CB80930 /* SoftwareUpdate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareUpdate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -138,7 +184,22 @@
 		43A9990F0BB3F93BB74D4056 /* Photos */ = {
 			isa = PBXGroup;
 			children = (
+				4F1A1995EE03D16FD51D0D08 /* MediaItem.swift */,
+				E9175BAC5DD3985FA3A81032 /* MediaPreviewView.swift */,
+				D8441925EE646530028364B0 /* MediaSizing.swift */,
+				AE506971E8DFB6A964FBD91E /* MediaThumbnail.swift */,
+				459EA69371284B9EC22DC701 /* PerceptualHash.swift */,
+				B22D75198779118C0B788C0B /* PhotoCategoryView.swift */,
+				EE79DC84C513B25E9FBDA3B2 /* PhotoCleanupComponents.swift */,
 				17525627BA6CCAE57E9A3847 /* PhotoCleanupModel.swift */,
+				0D2B2DEFB2DA02A7132AA782 /* PhotoGrouping.swift */,
+				D518DC986E6702AB869A19D1 /* PhotoLibraryAccess.swift */,
+				E3883B1045F1356010A38D94 /* PhotoLibraryScanner.swift */,
+				774F67204DDBC8C528559979 /* PhotoLibraryStatusViews.swift */,
+				7AA344F4F1246DED64367864 /* PhotoScanCache.swift */,
+				E017B65D9AA1306B9D463102 /* PhotoScanResult.swift */,
+				8A54992A4986D9F2CBF6CF9F /* PhotosHomeView.swift */,
+				A49C1FD35CC7B29883D8BE02 /* VideosHomeView.swift */,
 			);
 			path = Photos;
 			sourceTree = "<group>";
@@ -172,6 +233,7 @@
 			isa = PBXGroup;
 			children = (
 				8D2F8D6EEC21E6AFFBD7A5D8 /* Guides */,
+				CEE0E83273BF895D43ACA024 /* Photos */,
 				A6D868844582E5B5068BA84E /* Protection */,
 				DEF8762FCD4389EBA2343DD1 /* FormattingTests.swift */,
 			);
@@ -259,6 +321,21 @@
 				DEE33271BCA091B28C22CE2A /* ContactCleanupModel.swift */,
 			);
 			path = Contacts;
+			sourceTree = "<group>";
+		};
+		CEE0E83273BF895D43ACA024 /* Photos */ = {
+			isa = PBXGroup;
+			children = (
+				72CA3BCBD37945620990FE97 /* MediaSizingTests.swift */,
+				414C8E690DC46A40E973CD9E /* PerceptualHashTests.swift */,
+				D5E1701DF96A2734F2DC9779 /* PhotoFixtures.swift */,
+				FA291DAF81679371954FBF2B /* PhotoGroupingTests.swift */,
+				40F8F4BDEA92DDD4D8C0638B /* PhotoKeepRankingTests.swift */,
+				490F678A4B044FBE16AE72BE /* PhotoScanCacheTests.swift */,
+				E0C6D7455DA2CC9CD405B375 /* PhotoWordingTests.swift */,
+				3314B3E08A6226980DDD50B0 /* SyntheticImages.swift */,
+			);
+			path = Photos;
 			sourceTree = "<group>";
 		};
 		D572DDEC022FDD1D132007BF /* Resources */ = {
@@ -477,9 +554,23 @@
 				06BF7DB45DE21571AB5FBE2B /* LinkCheck.swift in Sources */,
 				A253758447B42D405C608876 /* LinkCheckView.swift in Sources */,
 				B9989E4263662E5F21C57126 /* MacCleanerMobileApp.swift in Sources */,
+				ABAB019D05FD0529FF6C1F30 /* MediaItem.swift in Sources */,
+				074753D0ADEA64C36A8E6FA0 /* MediaPreviewView.swift in Sources */,
+				A917590B46BEE87FE3CFCB4E /* MediaSizing.swift in Sources */,
+				92FF4C234FF5DE70F1DC1240 /* MediaThumbnail.swift in Sources */,
 				F2D696500A5156C5A0C98AE8 /* OnboardingView.swift in Sources */,
 				D88C85CBECD6E66455E9BD91 /* OverviewView.swift in Sources */,
+				35568F61993B825E56324626 /* PerceptualHash.swift in Sources */,
+				E16054AF0542701695EEDEE3 /* PhotoCategoryView.swift in Sources */,
+				F8DB8A533367D2823057B7E2 /* PhotoCleanupComponents.swift in Sources */,
 				6776040EC9020D61AB3F3B86 /* PhotoCleanupModel.swift in Sources */,
+				B35CA5B780ECCF8F9F87EE7B /* PhotoGrouping.swift in Sources */,
+				B2D9897753DC4A59F962773C /* PhotoLibraryAccess.swift in Sources */,
+				0BE45222111F189E0F0E4BE3 /* PhotoLibraryScanner.swift in Sources */,
+				9ECFCF44F7D8E708FD25E2FA /* PhotoLibraryStatusViews.swift in Sources */,
+				9AE0E8C07AD6B3ADCB3E627A /* PhotoScanCache.swift in Sources */,
+				3F022EC19DD35849A2EFCBB4 /* PhotoScanResult.swift in Sources */,
+				BC55149696CF23820F249FA8 /* PhotosHomeView.swift in Sources */,
 				0CDFC26D41B12B65D53B66CC /* ProtectionComponents.swift in Sources */,
 				08B9063FF96077506E899FEB /* ProtectionHomeView.swift in Sources */,
 				79852B2837C62AD16B8237DE /* ProtectionModel.swift in Sources */,
@@ -489,6 +580,7 @@
 				44FD2936ACE90F4593214A35 /* Theme.swift in Sources */,
 				76961182F3AB01844FC52C56 /* ThreatFeeds.swift in Sources */,
 				85EB15D2553C65226341AE45 /* ThreatIntel.swift in Sources */,
+				8FC5E87EF763195A3D56FF0F /* VideosHomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -500,11 +592,19 @@
 				BE73A35D2FAFC2CFDCCE07B3 /* FormattingTests.swift in Sources */,
 				FF87C079389B7BDC4DFA4860 /* GuideLibraryTests.swift in Sources */,
 				56EBE1D0BED7F9DD203AF729 /* LinkCheckTests.swift in Sources */,
+				7CFCDD69E0C51D8621C36E92 /* MediaSizingTests.swift in Sources */,
+				F71ECC04E9FF952F5297001D /* PerceptualHashTests.swift in Sources */,
+				11815FC09A78567E1619CBA3 /* PhotoFixtures.swift in Sources */,
+				11E5E6EDDFB0454748D72CE5 /* PhotoGroupingTests.swift in Sources */,
+				FAEAC09729082700979B6A53 /* PhotoKeepRankingTests.swift in Sources */,
+				89AC5DE103F65DFE36B08D03 /* PhotoScanCacheTests.swift in Sources */,
+				56CBF8B210EC6FDF5F4E8317 /* PhotoWordingTests.swift in Sources */,
 				853238ABBB5B731EE41AC6D0 /* ProtectionModelTests.swift in Sources */,
 				662D50C82BC89B0D063596CB /* ProtectionStatusTests.swift in Sources */,
 				9768BE2B9C67C1CDFC242A02 /* ProtectionTestSupport.swift in Sources */,
 				7549753451028F5AAD2AED64 /* SafariBlocklistTests.swift in Sources */,
 				5E7BB86A04BF2A0544E57361 /* SoftwareUpdateTests.swift in Sources */,
+				C8088BD0117C04DC003440A1 /* SyntheticImages.swift in Sources */,
 				394D62AFE0FE36542F13C31D /* ThreatFeedParsingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -742,6 +842,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSContactsUsageDescription = "Mac Cleaner finds duplicate and incomplete contacts so you can merge or remove them. Your contacts never leave your iPhone, and a backup is kept before every change.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Mac Cleaner looks for duplicate and similar photos, screenshots, bursts and large videos so you can free up space. Your photos never leave your iPhone.";
+				INFOPLIST_KEY_PHPhotoLibraryPreventAutomaticLimitedAccessAlert = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -770,6 +871,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSContactsUsageDescription = "Mac Cleaner finds duplicate and incomplete contacts so you can merge or remove them. Your contacts never leave your iPhone, and a backup is kept before every change.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Mac Cleaner looks for duplicate and similar photos, screenshots, bursts and large videos so you can free up space. Your photos never leave your iPhone.";
+				INFOPLIST_KEY_PHPhotoLibraryPreventAutomaticLimitedAccessAlert = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

@@ -1,0 +1,98 @@
+name: MacCleanerMobile
+options:
+  bundleIdPrefix: com.maccleaner
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+  groupSortPosition: top
+  xcodeVersion: "27.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGN_STYLE: Automatic
+    # Set DEVELOPMENT_TEAM (or pick a team in Xcode) to run on a device; the simulator needs none.
+    DEVELOPMENT_TEAM: ""
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    DEAD_CODE_STRIPPING: YES
+targets:
+  MacCleanerMobile:
+    type: application
+    platform: iOS
+    sources:
+      - path: MacCleanerMobile
+    entitlements:
+      path: MacCleanerMobile/MacCleanerMobile.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.maccleaner.MacCleaner.mobile
+    settings:
+      base:
+        PRODUCT_NAME: Mac Cleaner
+        PRODUCT_MODULE_NAME: MacCleanerMobile
+        PRODUCT_BUNDLE_IDENTIFIER: com.maccleaner.MacCleaner.mobile
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Mac Cleaner
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Mac Cleaner looks for duplicate and similar photos, screenshots, bursts and large videos so you can free up space. Your photos never leave your iPhone."
+        INFOPLIST_KEY_NSContactsUsageDescription: "Mac Cleaner finds duplicate and incomplete contacts so you can merge or remove them. Your contacts never leave your iPhone, and a backup is kept before every change."
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    dependencies:
+      - target: ContentBlocker
+        embed: true
+        codeSign: true
+  ContentBlocker:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: ContentBlocker
+    entitlements:
+      path: ContentBlocker/ContentBlocker.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.maccleaner.MacCleaner.mobile
+    info:
+      path: ContentBlocker/Info.plist
+      properties:
+        CFBundleDisplayName: Mac Cleaner Protection
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.content-blocker
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentBlockerRequestHandler
+    settings:
+      base:
+        PRODUCT_NAME: ContentBlocker
+        PRODUCT_BUNDLE_IDENTIFIER: com.maccleaner.MacCleaner.mobile.ContentBlocker
+        APPLICATION_EXTENSION_API_ONLY: YES
+  MacCleanerMobileTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MacCleanerMobileTests
+    dependencies:
+      - target: MacCleanerMobile
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.maccleaner.MacCleaner.mobile.tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  MacCleanerMobile:
+    build:
+      targets:
+        MacCleanerMobile: all
+        MacCleanerMobileTests: [test]
+    test:
+      targets:
+        - MacCleanerMobileTests
+      gatherCoverageData: false

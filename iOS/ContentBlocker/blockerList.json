@@ -1,0 +1,6 @@
+[
+  {
+    "trigger": { "url-filter": "^https?://blocked\\.invalid/" },
+    "action": { "type": "block" }
+  }
+]

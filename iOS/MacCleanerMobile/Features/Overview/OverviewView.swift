@@ -130,7 +130,7 @@ struct OverviewView: View {
                 ForEach(suggestions) { guide in
                     NavigationLink { GuideDetailView(guide: guide, context: model.guideContext) } label: {
                         HStack(spacing: 12) {
-                            IconTile(symbol: guide.symbol, tint: MobileSection.guides.tint, size: 32)
+                            IconTile(symbol: guide.symbol, tint: guide.tint, size: 32)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(guide.title).font(.subheadline.weight(.semibold))
                                 Text(guide.summary).font(.footnote).foregroundStyle(.secondary).lineLimit(2)

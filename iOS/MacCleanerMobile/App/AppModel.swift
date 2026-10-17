@@ -24,7 +24,9 @@ final class AppModel {
     /// What the guides need to pick the ones that help now.
     var guideContext: GuideContext {
         GuideContext(storage: storage, device: device, deletedPhotos: photos.hasDeletedItems,
-                     deletedFiles: files.hasDeletedItems, safariProtectionEnabled: protection.safariProtectionEnabled)
+                     deletedFiles: files.hasDeletedItems, safariProtectionEnabled: protection.safariProtectionEnabled,
+                     systemUpToDate: protection.systemUpToDate, passcodeSet: protection.passcodeSet,
+                     availableSystemVersion: protection.availableSystemVersion)
     }
 
     /// Everything the last scans found that could be freed.

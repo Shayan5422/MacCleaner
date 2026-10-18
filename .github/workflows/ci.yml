@@ -111,3 +111,106 @@ jobs:
             build/TestResults.xcresult
           if-no-files-found: ignore
           retention-days: 14
+
+  ios-test:
+    name: iOS build & test (Xcode 27)
+    # The iPhone and iPad app in iOS/, tested on a simulator. No signing: simulator builds
+    # are signed to run locally.
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      REQUIRED_XCODE_MAJOR: "27"
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          # Same choice as the macOS job: the stable Xcode 27, else the default.
+          if [ -d /Applications/Xcode_27.app ]; then
+            echo "DEVELOPER_DIR=/Applications/Xcode_27.app/Contents/Developer" >> "$GITHUB_ENV"
+            export DEVELOPER_DIR=/Applications/Xcode_27.app/Contents/Developer
+          fi
+          version_output="$(xcodebuild -version)"
+          version="$(printf '%s\n' "$version_output" | awk 'NR == 1 { print $2 }')"
+          major="${version%%.*}"
+          echo "Using Xcode $version (${DEVELOPER_DIR:-$(xcode-select -p)})"
+          if [ "$major" -lt "$REQUIRED_XCODE_MAJOR" ]; then
+            echo "::error title=Xcode too old::Mac Cleaner needs Xcode $REQUIRED_XCODE_MAJOR or later, but this runner has Xcode $version."
+            exit 1
+          fi
+
+      - name: Pick an iPhone simulator
+        run: |
+          set -euo pipefail
+          # The first iPhone of the newest iOS runtime: simulator names change with every Xcode.
+          picked="$(xcrun simctl list devices available -j | python3 -c '
+          import json, re, sys
+          devices = json.load(sys.stdin)["devices"]
+          def version(runtime):
+              m = re.search(r"iOS-(\d+)-(\d+)", runtime)
+              return tuple(map(int, m.groups())) if m else None
+          runtimes = sorted((v, r) for r in devices if (v := version(r)))
+          for _, runtime in reversed(runtimes):
+              for device in devices[runtime]:
+                  if device["name"].startswith("iPhone"):
+                      print(device["udid"], device["name"], runtime.rsplit(".", 1)[-1])
+                      sys.exit(0)
+          sys.exit("No iPhone simulator found")
+          ')" || { echo "::error title=No simulator::This runner has no iPhone simulator."; xcrun simctl list runtimes; exit 1; }
+          echo "Testing on: ${picked#* }"
+          echo "IOS_SIMULATOR_ID=${picked%% *}" >> "$GITHUB_ENV"
+
+      - name: Build and test
+        run: |
+          set -o pipefail
+          mkdir -p build
+          xcodebuild \
+            -project iOS/MacCleanerMobile.xcodeproj \
+            -scheme MacCleanerMobile \
+            -configuration Debug \
+            -destination "id=$IOS_SIMULATOR_ID" \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/TestResults.xcresult \
+            test 2>&1 | tee build/xcodebuild.log
+
+      - name: Fail on Swift warnings
+        run: |
+          if grep -E '\.swift:[0-9]+:[0-9]+: warning:' build/xcodebuild.log | sort -u > build/warnings.txt && [ -s build/warnings.txt ]; then
+            echo "::error title=Compiler warnings::$(wc -l < build/warnings.txt | tr -d ' ') Swift warning(s) found"
+            cat build/warnings.txt
+            exit 1
+          fi
+          echo "No Swift compiler warnings."
+
+      - name: Summarize tests
+        if: always()
+        run: |
+          if [ -f build/xcodebuild.log ]; then
+            summary="$(grep -E 'Test run with [0-9]+ tests' build/xcodebuild.log | tail -1 || true)"
+            failures="$(grep -E '✘ Test ' build/xcodebuild.log | sort -u | head -50 || true)"
+            {
+              echo "### iOS test results"
+              echo ""
+              echo "${summary:-No Swift Testing summary found (the build may have failed).}"
+              if [ -n "$failures" ]; then
+                echo ""
+                echo '```'
+                echo "$failures"
+                echo '```'
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload logs and test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xcodebuild-ios-results
+          path: |
+            build/xcodebuild.log
+            build/warnings.txt
+            build/TestResults.xcresult
+          if-no-files-found: ignore
+          retention-days: 14

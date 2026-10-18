@@ -50,9 +50,19 @@ open iOS/MacCleanerMobile.xcodeproj
 ```
 
 The simulator needs no signing. To run on a device, pick your team under Signing & Capabilities for
-the `MacCleanerMobile` and `ContentBlocker` targets, or set `DEVELOPMENT_TEAM` in `project.yml`.
-Automatic signing registers the App Group `group.com.maccleaner.MacCleaner.mobile`, which the app
-and the Safari extension share.
+the `MacCleanerMobile` and `ContentBlocker` targets. The App Group
+`group.com.maccleaner.MacCleaner.mobile`, which the app and the Safari extension share, has to be
+registered on that team once, from the App Groups section of the same tab:
+`xcodebuild -allowProvisioningUpdates` creates the app IDs and profiles but doesn't register app
+groups. After that, the command line can build and install on a device too:
+
+```bash
+xcodebuild -project iOS/MacCleanerMobile.xcodeproj -scheme MacCleanerMobile -configuration Release -destination 'id=<device UDID>' -derivedDataPath iOS/build/device -allowProvisioningUpdates DEVELOPMENT_TEAM=<team ID> build
+```
+
+```bash
+xcrun devicectl device install app --device '<device UDID>' 'iOS/build/device/Build/Products/Release-iphoneos/Mac Cleaner.app'
+```
 
 Tests (Swift Testing, fixtures only; any simulator from `xcrun simctl list devices available`):
 
